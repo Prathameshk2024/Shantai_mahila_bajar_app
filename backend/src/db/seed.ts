@@ -1,0 +1,285 @@
+import type {
+  Address, AdminPaymentAccount, Category, Order, Product, Seller, SubscriptionPayment,
+} from '@shared/types.js'
+import { computeReadiness, readinessBand } from '@shared/readiness.js'
+import type { DigitalProfile } from '@shared/types.js'
+
+export interface Db {
+  sellers: Seller[]
+  products: Product[]
+  orders: Order[]
+  payments: SubscriptionPayment[]
+  addresses: Address[]
+}
+
+export const CATEGORIES: Category[] = [
+  { id: 'food',       icon: '🍱', mr: 'घरगुती खाद्यपदार्थ', en: 'Homemade Food',     food: true },
+  { id: 'pickle',     icon: '🫙', mr: 'लोणची, पापड, मसाले', en: 'Pickles & Masala',  food: true },
+  { id: 'sweets',     icon: '🍬', mr: 'मिठाई व बेकरी',      en: 'Sweets & Bakery',   food: true },
+  { id: 'namkeen',    icon: '🥟', mr: 'शेव, भेळ, चिवडा',    en: 'Namkeen & Snacks',  food: true },
+  { id: 'handicraft', icon: '🧺', mr: 'हस्तकला',            en: 'Handicrafts',       food: false },
+  { id: 'embroidery', icon: '🪡', mr: 'भरतकाम',             en: 'Embroidery',        food: false },
+  { id: 'textile',    icon: '🧵', mr: 'कापड व साड्या',      en: 'Textiles & Sarees', food: false },
+  { id: 'tailoring',  icon: '✂️', mr: 'शिवणकाम',           en: 'Tailoring',         food: false },
+  { id: 'agarbatti',  icon: '🕯️', mr: 'अगरबत्ती व मेणबत्ती', en: 'Agarbatti & Candles', food: false },
+  { id: 'jewellery',  icon: '📿', mr: 'दागिने',             en: 'Jewellery',         food: false },
+  { id: 'beauty',     icon: '🌿', mr: 'सौंदर्य व आरोग्य',   en: 'Beauty & Wellness', food: false },
+  { id: 'decor',      icon: '🪔', mr: 'घर सजावट',           en: 'Home Decor',        food: false },
+  { id: 'farm',       icon: '🌾', mr: 'शेतीपूरक उत्पादने',  en: 'Farm Produce',      food: true },
+]
+
+export const ADMIN_PAYMENT_ACCOUNT: AdminPaymentAccount = {
+  label: 'Shanta Mahila Bazar',
+  upiId: 'shantabazar@okaxis',
+  bankName: 'Bank of Maharashtra',
+  accountNo: 'XXXXXXXX4471',
+  ifsc: 'MAHB0000123',
+}
+
+const digital = (
+  s: boolean, i: boolean, u: boolean, w: boolean, sm: boolean, dm: boolean,
+): DigitalProfile => ({
+  smartphone: s, internet: i, upi: u,
+  whatsappBusiness: w, socialMedia: sm, digitalMarketing: dm,
+})
+
+/** Score a seed seller with plausible measured factors so the index isn't flat. */
+function scored(d: DigitalProfile, measured: [boolean, boolean, boolean, boolean]) {
+  const score = computeReadiness(d, {
+    hasBranding: measured[0],
+    hasPackagingDetail: measured[1],
+    hasOnlineOrders: measured[2],
+    hasDigitalFinance: measured[3],
+  })
+  return { readinessScore: score, readinessBand: readinessBand(score) }
+}
+
+const now = Date.now()
+const hoursAgo = (h: number) => new Date(now - h * 3600_000).toISOString()
+const daysAgo = (d: number) => new Date(now - d * 86_400_000).toISOString()
+
+const d1 = digital(true, true, true, true, false, false)
+const d2 = digital(true, true, true, true, true, true)
+const d3 = digital(true, false, false, true, false, false)
+
+export function seed(): Db {
+  const sellers: Seller[] = [
+    {
+      id: 's1',
+      womenBizId: 'WB-ANADUR-001',
+      name: 'सुनीता पाटील', photo: '👩🏽', phone: '9822011223', whatsapp: '9822011223',
+      age: 38, education: 'secondary',
+      village: 'आणदुर', villageCode: 'ANADUR', taluka: 'तुळजापूर', district: 'धाराशिव', pincode: '413601',
+      shopName: 'सुनीता गृहउद्योग', shopSlug: 'sunitagruhaudyoga-wb-anadur-001',
+      about: 'गेली 12 वर्षे मी घरी लोणची आणि मसाले बनवते. सर्व पदार्थ घरचेच.',
+      businessType: 'shg', shgName: 'जिजाऊ महिला बचत गट',
+      yearsInBusiness: 12, monthlyCapacity: 120,
+      sellsFood: true, fssai: '21522004000123', fssaiExpiry: '2027-03-31',
+      upiId: 'sunita@ybl', upiVerified: true,
+      digital: d1, ...scored(d1, [true, true, true, true]),
+      isOpen: true, deliveryFee: 20, freeDeliveryAbove: 500, minOrder: 100,
+      dispatch: 'same', pincodes: ['413601', '413602', '413604'],
+      status: 'ACTIVE', packsApproved: 1, rating: 4.6, ratingCount: 38,
+      qrScans: 41, qrOrders: 7, createdAt: daysAgo(90),
+    },
+    {
+      id: 's2',
+      womenBizId: 'WB-JEVALI-001',
+      name: 'मंगल जाधव', photo: '👩🏻', phone: '9764455661', whatsapp: '9764455661',
+      age: 45, education: 'middle',
+      village: 'जेवळी', villageCode: 'JEVALI', taluka: 'तुळजापूर', district: 'धाराशिव', pincode: '413603',
+      shopName: 'मंगल हातमाग', shopSlug: 'mangalahatamaga-wb-jevali-001',
+      about: 'बचत गटातर्फे आम्ही हातमागाच्या साड्या आणि चादरी बनवतो.',
+      businessType: 'shg', shgName: 'सावित्री महिला बचत गट',
+      yearsInBusiness: 8, monthlyCapacity: 25,
+      sellsFood: false,
+      upiId: 'mangalj@okicici', upiVerified: true,
+      digital: d2, ...scored(d2, [true, true, true, true]),
+      isOpen: true, deliveryFee: 40, freeDeliveryAbove: 1500, minOrder: 0,
+      dispatch: '23', pincodes: ['413603', '413601'],
+      status: 'ACTIVE', packsApproved: 2, rating: 4.8, ratingCount: 21,
+      qrScans: 12, qrOrders: 2, createdAt: daysAgo(60),
+    },
+    {
+      id: 's3',
+      womenBizId: 'WB-BHOSGA-001',
+      name: 'कविता शिंदे', photo: '👩🏾', phone: '9890033441',
+      age: 31, education: 'higher',
+      village: 'भोसगा', villageCode: 'BHOSGA', taluka: 'तुळजापूर', district: 'धाराशिव', pincode: '413604',
+      shopName: 'कविता गृहउद्योग', shopSlug: 'kavitagruhaudyoga-wb-bhosga-001',
+      about: 'सणासुदीला लागणारे सर्व घरगुती पदार्थ.',
+      businessType: 'individual',
+      yearsInBusiness: 3, monthlyCapacity: 60,
+      sellsFood: true, fssai: '11523005000456', fssaiExpiry: '2026-11-30',
+      upiId: 'kavitas@paytm', upiVerified: false,
+      digital: d3, ...scored(d3, [false, true, false, false]),
+      isOpen: true, deliveryFee: 0, freeDeliveryAbove: 0, minOrder: 150,
+      dispatch: '1', pincodes: ['413604', '413601'],
+      status: 'ACTIVE', packsApproved: 1, rating: 4.4, ratingCount: 12,
+      qrScans: 5, qrOrders: 0, createdAt: daysAgo(20),
+    },
+  ]
+
+  const products: Product[] = [
+    { id: 'p1', sellerId: 's1', emoji: '🫙', name: 'आंब्याचे लोणचे', nameEn: 'Mango Pickle',
+      categoryId: 'pickle', isFood: true, fssai: '21522004000123', fssaiExpiry: '2027-03-31',
+      ingredients: 'कैरी, मोहरी, मेथी, हळद, तिखट, तेल, मीठ', vegType: 'veg',
+      price: 220, mrp: 250, unit: 'kg', stock: 12, status: 'LIVE', views: 184, createdAt: daysAgo(80) },
+    { id: 'p2', sellerId: 's1', emoji: '🌶️', name: 'कांदा लसूण मसाला', nameEn: 'Kanda Lasun Masala',
+      categoryId: 'pickle', isFood: true, fssai: '21522004000123', fssaiExpiry: '2027-03-31',
+      ingredients: 'लाल मिरची, कांदा, लसूण, खोबरे, तीळ, मीठ', vegType: 'veg',
+      price: 180, mrp: 200, unit: 'g', stock: 8, status: 'LIVE', views: 141, createdAt: daysAgo(75) },
+    { id: 'p3', sellerId: 's1', emoji: '🥟', name: 'तांदळाचे पापड', nameEn: 'Rice Papad',
+      categoryId: 'namkeen', isFood: true, fssai: '21522004000123', fssaiExpiry: '2027-03-31',
+      ingredients: 'तांदूळ पीठ, जिरे, मीठ, पापडखार', vegType: 'veg',
+      price: 90, mrp: 0, unit: 'g', stock: 0, status: 'LIVE', views: 63, createdAt: daysAgo(40) },
+    { id: 'p4', sellerId: 's1', emoji: '🍯', name: 'घरगुती तूप', nameEn: 'Homemade Ghee',
+      categoryId: 'food', isFood: true, fssai: '21522004000123', fssaiExpiry: '2027-03-31',
+      ingredients: 'गाईचे दूध', vegType: 'veg',
+      price: 650, mrp: 700, unit: 'litre', stock: 4, status: 'PENDING', views: 0, createdAt: hoursAgo(20) },
+    { id: 'p5', sellerId: 's2', emoji: '🥻', name: 'पैठणी साडी', nameEn: 'Paithani Saree',
+      categoryId: 'textile', isFood: false, material: 'रेशीम, जरी',
+      price: 8500, mrp: 11000, unit: 'piece', stock: 2, status: 'LIVE', views: 312, createdAt: daysAgo(55) },
+    { id: 'p6', sellerId: 's2', emoji: '🧣', name: 'सुती दुपट्टा', nameEn: 'Cotton Dupatta',
+      categoryId: 'textile', isFood: false, material: 'सुती कापड',
+      price: 450, mrp: 600, unit: 'piece', stock: 15, status: 'LIVE', views: 97, createdAt: daysAgo(50) },
+    { id: 'p7', sellerId: 's2', emoji: '🧺', name: 'बांबूची टोपली', nameEn: 'Bamboo Basket',
+      categoryId: 'handicraft', isFood: false, material: 'बांबू',
+      price: 340, mrp: 0, unit: 'piece', stock: 6, status: 'LIVE', views: 55, createdAt: daysAgo(30) },
+    { id: 'p8', sellerId: 's2', emoji: '🪡', name: 'भरतकाम उशी कव्हर', nameEn: 'Embroidered Cushion Cover',
+      categoryId: 'embroidery', isFood: false, material: 'सुती कापड, रेशमी धागा',
+      price: 280, mrp: 350, unit: 'set', stock: 9, status: 'LIVE', views: 44, createdAt: daysAgo(15) },
+    { id: 'p9', sellerId: 's3', emoji: '🍬', name: 'पुरणपोळी', nameEn: 'Puran Poli',
+      categoryId: 'sweets', isFood: true, fssai: '11523005000456', fssaiExpiry: '2026-11-30',
+      ingredients: 'गहू, हरभरा डाळ, गूळ, वेलची, तूप', vegType: 'veg',
+      price: 40, mrp: 0, unit: 'piece', stock: 0, madeToOrder: true, status: 'LIVE', views: 208, createdAt: daysAgo(18) },
+    { id: 'p10', sellerId: 's3', emoji: '🥮', name: 'बेसन लाडू', nameEn: 'Besan Ladoo',
+      categoryId: 'sweets', isFood: true, fssai: '11523005000456', fssaiExpiry: '2026-11-30',
+      ingredients: 'बेसन, साखर, तूप, वेलची', vegType: 'veg',
+      price: 380, mrp: 420, unit: 'kg', stock: 5, status: 'LIVE', views: 133, createdAt: daysAgo(12) },
+    { id: 'p11', sellerId: 's3', emoji: '🕯️', name: 'सुगंधी अगरबत्ती', nameEn: 'Incense Sticks',
+      categoryId: 'agarbatti', isFood: false, material: 'बांबू काडी, सुगंधी तेल',
+      price: 60, mrp: 80, unit: 'set', stock: 30, status: 'LIVE', views: 76, createdAt: daysAgo(6) },
+  ]
+
+  const orders: Order[] = [
+    {
+      id: 'SMB1043', sellerId: 's1', customerId: 'c1',
+      customerName: 'प्रिया देशमुख', customerPhone: '9011223344',
+      address: 'फ्लॅट 302, शिवसागर अपार्टमेंट, विमाननगर, पुणे',
+      landmark: 'सिम्बायोसिस कॉलेजजवळ', pincode: '413601',
+      items: [
+        { productId: 'p1', name: 'आंब्याचे लोणचे', emoji: '🫙', qty: 1, price: 220 },
+        { productId: 'p2', name: 'कांदा लसूण मसाला', emoji: '🌶️', qty: 2, price: 180 },
+      ],
+      itemsTotal: 580, deliveryFee: 0, total: 580,
+      paymentMode: 'UPI', paymentStatus: 'UPI_SUBMITTED', paymentUtr: '431209887654',
+      status: 'PLACED', deliveryOtp: '4417', placedAt: hoursAgo(1),
+      events: [{ to: 'PLACED', at: hoursAgo(1), by: 'customer' }],
+    },
+    {
+      id: 'SMB1042', sellerId: 's1', customerId: 'c2',
+      customerName: 'अनिता कुलकर्णी', customerPhone: '9922334455',
+      address: 'घर क्र. 12, गणेश नगर, आणदुर', landmark: 'ग्रामपंचायत ऑफिससमोर', pincode: '413601',
+      items: [{ productId: 'p3', name: 'तांदळाचे पापड', emoji: '🥟', qty: 3, price: 90 }],
+      itemsTotal: 270, deliveryFee: 20, total: 290,
+      paymentMode: 'COD', paymentStatus: 'COD_PENDING',
+      status: 'PACKED', deliveryOtp: '2093', placedAt: hoursAgo(6),
+      events: [
+        { to: 'PLACED', at: hoursAgo(6), by: 'customer' },
+        { to: 'ACCEPTED', at: hoursAgo(5), by: 'seller' },
+        { to: 'PACKED', at: hoursAgo(2), by: 'seller' },
+      ],
+    },
+    {
+      id: 'SMB1039', sellerId: 's1', customerId: 'c3',
+      customerName: 'सविता मोरे', customerPhone: '9765544332',
+      address: 'मु. पो. रांजणगाव, ता. तुळजापूर', landmark: 'शाळेजवळ', pincode: '413602',
+      items: [{ productId: 'p1', name: 'आंब्याचे लोणचे', emoji: '🫙', qty: 2, price: 220 }],
+      itemsTotal: 440, deliveryFee: 20, total: 460,
+      paymentMode: 'COD', paymentStatus: 'COD_PENDING',
+      status: 'OUT_FOR_DELIVERY', deliveryOtp: '7752', placedAt: hoursAgo(28),
+      events: [
+        { to: 'PLACED', at: hoursAgo(28), by: 'customer' },
+        { to: 'ACCEPTED', at: hoursAgo(27), by: 'seller' },
+        { to: 'PACKED', at: hoursAgo(25), by: 'seller' },
+        { to: 'OUT_FOR_DELIVERY', at: hoursAgo(3), by: 'seller' },
+      ],
+    },
+    {
+      id: 'SMB1031', sellerId: 's1', customerId: 'c4',
+      customerName: 'रेखा भोसले', customerPhone: '9834455667',
+      address: 'सर्वे नं. 45, तुळजापूर रोड, आणदुर', pincode: '413601',
+      items: [{ productId: 'p2', name: 'कांदा लसूण मसाला', emoji: '🌶️', qty: 1, price: 180 }],
+      itemsTotal: 180, deliveryFee: 20, total: 200,
+      paymentMode: 'UPI', paymentStatus: 'UPI_CONFIRMED', paymentUtr: '430918776541',
+      status: 'COMPLETED', deliveryOtp: '1188', placedAt: hoursAgo(9),
+      events: [
+        { to: 'PLACED', at: hoursAgo(9), by: 'customer' },
+        { to: 'ACCEPTED', at: hoursAgo(8), by: 'seller' },
+        { to: 'PACKED', at: hoursAgo(7), by: 'seller' },
+        { to: 'OUT_FOR_DELIVERY', at: hoursAgo(5), by: 'seller' },
+        { to: 'DELIVERED', at: hoursAgo(4), by: 'seller' },
+        { to: 'COMPLETED', at: hoursAgo(2), by: 'system' },
+      ],
+    },
+    {
+      id: 'SMB1044', sellerId: 's2', customerId: 'c1',
+      customerName: 'प्रिया देशमुख', customerPhone: '9011223344',
+      address: 'फ्लॅट 302, शिवसागर अपार्टमेंट, विमाननगर, पुणे',
+      landmark: 'सिम्बायोसिस कॉलेजजवळ', pincode: '413603',
+      items: [{ productId: 'p6', name: 'सुती दुपट्टा', emoji: '🧣', qty: 1, price: 450 }],
+      itemsTotal: 450, deliveryFee: 40, total: 490,
+      paymentMode: 'COD', paymentStatus: 'COD_PENDING',
+      status: 'ACCEPTED', deliveryOtp: '5521', placedAt: hoursAgo(9),
+      events: [
+        { to: 'PLACED', at: hoursAgo(9), by: 'customer' },
+        { to: 'ACCEPTED', at: hoursAgo(8), by: 'seller' },
+      ],
+    },
+  ]
+
+  const payments: SubscriptionPayment[] = [
+    { id: 'sp1', sellerId: 's4', sellerName: 'शोभा गायकवाड', womenBizId: 'WB-CHIVARI-001',
+      phone: '9764112233', amount: 50, utr: '512309887711', payerUpi: 'shobha@ybl',
+      submittedAt: hoursAgo(4), status: 'PENDING', duplicateUtr: false },
+    { id: 'sp2', sellerId: 's5', sellerName: 'वैशाली पवार', womenBizId: 'WB-RUDRAWADI-001',
+      phone: '9822556677', amount: 50, utr: '431209887654', payerUpi: 'vaishali@okhdfcbank',
+      submittedAt: hoursAgo(19), status: 'PENDING', duplicateUtr: true },
+    { id: 'sp3', sellerId: 's6', sellerName: 'लता कांबळे', womenBizId: 'WB-ANADUR-002',
+      phone: '9011778899', amount: 50, utr: '509911223344', payerUpi: 'lata.k@paytm',
+      submittedAt: hoursAgo(50), status: 'PENDING', duplicateUtr: false },
+    { id: 'sp4', sellerId: 's1', sellerName: 'सुनीता पाटील', womenBizId: 'WB-ANADUR-001',
+      phone: '9822011223', amount: 50, utr: '401122334455', payerUpi: 'sunita@ybl',
+      submittedAt: daysAgo(30), status: 'APPROVED', duplicateUtr: false, verifiedAt: daysAgo(30) },
+  ]
+
+  const addresses: Address[] = [
+    { id: 'a1', label: 'घर', line: 'फ्लॅट 302, शिवसागर अपार्टमेंट, विमाननगर',
+      landmark: 'सिम्बायोसिस कॉलेजजवळ', city: 'पुणे', pincode: '413601', isDefault: true },
+    { id: 'a2', label: 'ऑफिस', line: 'दुसरा मजला, टेक पार्क, खराडी',
+      landmark: 'EON IT पार्क', city: 'पुणे', pincode: '413603', isDefault: false },
+  ]
+
+  return { sellers, products, orders, payments, addresses }
+}
+
+export const SELLER_WEEK_SEED: Record<string, unknown> = {
+  s1: {
+    days: [
+      { d: 'सोम', dEn: 'Mon', v: 240 },
+      { d: 'मंगळ', dEn: 'Tue', v: 0 },
+      { d: 'बुध', dEn: 'Wed', v: 560 },
+      { d: 'गुरु', dEn: 'Thu', v: 320 },
+      { d: 'शुक्र', dEn: 'Fri', v: 180 },
+      { d: 'शनि', dEn: 'Sat', v: 890 },
+      { d: 'रवि', dEn: 'Sun', v: 640 },
+    ],
+    lastWeekTotal: 2190,
+    ordersThisWeek: 11,
+    ordersLastWeek: 8,
+    views: 388,
+    ordered: 11,
+    repeatCustomers: 3,
+  },
+}

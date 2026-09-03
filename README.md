@@ -1,0 +1,242 @@
+# शांता महिला बाजार · Shanta Mahila Bazar
+
+Digital entrepreneurship platform for rural women entrepreneurs.
+Sellers and customers use the **app**; the **admin console is a separate site**
+and only its API lives here.
+
+Product spec: [`docs/FEATURE-SPEC.md`](docs/FEATURE-SPEC.md)
+
+---
+
+## Layout
+
+```
+shared/     TypeScript types + domain rules used by BOTH sides
+backend/    Node + Express + TypeScript API  (includes the admin API)
+frontend/   React + Vite + TypeScript        (seller + customer only)
+docs/       the product specification
+```
+
+`shared/` is the point of the TypeScript: the order state machine, slot rules,
+FSSAI/UPI validation and the Shanta Mahila Bazar ID generator are written once and imported
+by both sides through the `@shared/*` alias. A change there is a compile error on
+whichever side has not caught up.
+
+## Run it
+
+```bash
+npm install          # installs all three workspaces
+npm run dev          # API on :4000, app on :5173
+```
+
+Or separately:
+
+```bash
+npm run dev:api
+npm run dev:web
+```
+
+Vite proxies `/api` to `localhost:4000`, so there is nothing to configure in
+development. Data lives in `backend/data/db.json`; delete it, or
+`POST /api/dev/reset`, to reseed.
+
+## Walk the app
+
+| Flow | How |
+|---|---|
+| **Landing** | `http://localhost:5173/` — two doors: sell, or buy |
+| **New seller** | "मला विकायचे आहे" → any 10-digit number → **any 4 digits** as OTP → the 6-step registration wizard |
+| **Existing seller** | Log in with `9822011223` (Sunita, WB-ANADUR-001) |
+| **Customer** | "मला खरेदी करायची आहे" → any number → any 4-digit OTP |
+| **Admin** | No UI here by design. `POST /api/auth/admin/login` then call `/api/admin/*` |
+
+Worth clicking through:
+
+- **Registration wizard** — her Shanta Mahila Bazar ID appears live on step 2 as soon as
+  she picks a village, and her digital score on step 4 as she answers.
+- **Add Product → step 2** — press the mic and speak the product name.
+- **Add Product → step 3** — food asks 4 fields, non-food asks 1.
+- **An order → पाठवले → पोहोचले** — it demands the customer's OTP, and the
+  check runs on the server, not in the browser.
+- **A cart with two sellers** — splits into two orders, two delivery fees,
+  two UPI QRs.
+
+---
+
+## What is in `shared/`
+
+| File | What it owns |
+|---|---|
+| `types.ts` | every shape that crosses the wire |
+| `orderFlow.ts` | the locked 6-state machine, and payment as a separate axis |
+| `seller.ts` | slots, plan, validation, the UPI intent-link builder |
+| `womenbiz.ts` | the Shanta Mahila Bazar ID, village codes, Devanagari transliteration |
+| `readiness.ts` | the Digital Readiness Index |
+
+### Shanta Mahila Bazar ID
+
+Format `WB-<VILLAGE>-<NNN>`, e.g. **WB-ANADUR-001**.
+
+The serial is **per village**, not global, because `WB-ANADUR-007` tells a field
+coordinator which village to visit and `WB-000431` tells them nothing. The five
+survey villages have fixed codes; any other village name is transliterated from
+Devanagari (`चिवरी → CHIVARI`, `रुद्रवाडी → RUDRAVADI`).
+
+### Digital Readiness Index
+
+Ten factors, ten marks each. **Six** are answered by her at registration as
+yes/no taps. The remaining four — branding, packaging, online customer contact,
+digital financial management — are **measured by the platform** from what she
+actually does, because someone who has never done a thing cannot honestly
+self-report it.
+
+That split is what makes the before/after comparison meaningful: the six
+self-reported answers are the baseline captured on day one, and the four
+measured ones move on their own as she uses the platform.
+
+Bands: 0-25 प्रारंभिक · 26-50 मूलभूत · 51-75 प्रगत · 76-100 डिजिटल उद्योजिका.
+
+---
+
+## Registration fields
+
+Collected in six steps. New fields taken from the project plan are marked ←.
+
+| Step | Fields |
+|---|---|
+| 1 · About you | name (voice), **age ←**, **education ←**, WhatsApp number ← |
+| 2 · Village | village (from the 5 survey villages, or free text), taluka, district, pincode → **generates her Shanta Mahila Bazar ID** |
+| 3 · Business | shop name (voice), business type (individual / SHG / Udyam), SHG name, **years in business ←**, **monthly capacity ←**, about (voice), sells food?, FSSAI number + expiry |
+| 4 · Digital use ← | six yes/no questions → **Digital Readiness Index** |
+| 5 · Money in | UPI ID, delivery charge, minimum order, dispatch time |
+| 6 · Review | everything, plus her ID and score, before submitting |
+
+---
+
+## Admin API — backend only
+
+There is **no admin UI in this repo**, deliberately: the client wants the admin
+site built separately. Everything it needs is JSON.
+
+```bash
+TOKEN=$(curl -s -X POST localhost:4000/api/auth/admin/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@shantabazar.in","password":"changeme"}' \
+  | python -c "import sys,json;print(json.load(sys.stdin)['session']['token'])")
+
+curl localhost:4000/api/admin/stats -H "Authorization: Bearer $TOKEN"
+```
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/admin/stats` | dashboard, registration funnel, earnings bands, readiness bands |
+| `GET /api/admin/payments?status=PENDING` | the ₹50 approvals queue, with `waitingHours` and a duplicate-UTR flag |
+| `POST /api/admin/payments/:id/approve` | grants 5 slots and flips her to ACTIVE |
+| `POST /api/admin/payments/:id/reject` | with a reason |
+| `POST /api/admin/sellers/:id/grant-slots` | goodwill / trainee batch |
+| `GET /api/admin/products?status=PENDING` | moderation queue |
+| `POST /api/admin/products/:id/moderate` | approve/reject — **refuses to publish food without FSSAI** |
+| `GET /api/admin/orders` | every order with its full status trail |
+| `GET /api/admin/sellers` | sellers with slot usage |
+| `POST /api/admin/sellers/:id/block` | suspend |
+| `GET /api/admin/impact` | the funder report: women, ₹ earned, villages, readiness |
+
+Set `ADMIN_PASSWORD` in the environment. The default is `changeme`.
+
+---
+
+## Design rules (not preferences)
+
+From section 6 of the spec, baked into `frontend/src/styles/theme.css`:
+
+- Marathi is the **default**, switchable in the landing header and in profile
+- Every icon carries a word; status is colour **+ icon + word**, never colour alone
+- 16px minimum text, 56px buttons, 44px touch targets
+- Four bottom tabs, one level deep. **No hamburger menu.**
+- One question per screen in every wizard, with progress dots
+- Confirmation dialogs state the consequence, never a bare "Are you sure?"
+- Latin digits (₹500, not ५००) — that is what is printed on money
+- **No web fonts.** Android ships Noto Sans Devanagari, so Marathi renders from
+  system fonts at zero network cost and the APK works offline.
+
+### Theming
+
+`frontend/src/styles/theme.css` starts with a `:root` block marked
+**THEME SWAP POINT**. Every colour, size and radius in the app comes from those
+tokens, so a new theme is a change to that one block and nothing else.
+
+### Voice typing
+
+`frontend/src/lib/useVoiceInput.ts` wraps the Web Speech API; the `VoiceInput`
+component in `components/ui.tsx` renders a text field with a mic beside it. It is
+used for the product name, ingredients, material, her name, shop name and her
+"about" text.
+
+The keyboard is never removed — voice is an addition. On a phone without speech
+support (iOS Safari) the mic simply does not render. Inside the APK the WebView
+needs `RECORD_AUDIO` in `AndroidManifest.xml`.
+
+### Responsive
+
+Phone-first. The app shell is 480px, widening to 760px above 900px; product
+grids are `auto-fill minmax(150px, 1fr)` so they go 2-up on a phone and more on
+a tablet. The landing page is the one full-width surface, with breakpoints at
+560 / 640 / 700 / 900 / 980px.
+
+---
+
+## Wiring up the real backend
+
+### MSG91
+
+`backend/src/services/otp.service.ts` already calls the real MSG91 endpoints —
+set `MSG91_AUTH_KEY` and `MSG91_TEMPLATE_ID` and it switches from demo mode to
+live SMS. The auth key stays on the server. **Never verify an OTP on the client.**
+
+### Firebase (free tier)
+
+- Firestore for the collections in spec section 11
+- Storage for product photos, payment screenshots and KYC — put those in a
+  **private** bucket behind signed URLs
+- Replace `backend/src/db/store.ts`; no route handler touches the file directly
+- Replace the token check in `backend/src/middleware/auth.ts` with
+  `verifyIdToken`, and gate admin on a custom claim
+- **Repeat every rule in Firestore security rules.** The slot limit is enforced
+  in `products.routes.ts`, not just by the disabled button — but a rule that
+  exists only in the API is one misconfigured client away from being no rule.
+
+### Analytics — do this now, not later
+
+`app_events(user_id, role, event, screen, at)` and
+`product_views(product_id, viewer_hash, at)` cannot be backfilled. Without them
+the first six months of the platform's growth story does not exist.
+
+---
+
+## Building the APK
+
+```bash
+cd frontend
+npm i -D @capacitor/cli @capacitor/core
+npx cap init Shanta Mahila Bazar in.shantabazar.app --web-dir=dist
+npm run cap:add && npm run cap:sync && npm run cap:open
+```
+
+`vite.config.ts` already sets `base: './'`, required for a Capacitor WebView.
+Set `VITE_API_URL` to the deployed API — inside the APK there is no dev server
+to proxy through.
+
+Then for the share QR:
+- **Android App Links** verified against your domain
+- **Play Install Referrer API** for deferred deep linking, so someone who scans
+  her QR without the app installed lands on *her shop* after installing
+
+> Do **not** use Firebase Dynamic Links. It shut down on 25 August 2025.
+
+---
+
+## Not built yet
+
+Reviews · chat · push notifications · disputes · returns and refunds · coupons ·
+real camera capture · QR image generation and decoding · courses and
+certificates · the seller's own address book.

@@ -1,0 +1,24 @@
+{
+  "name": "womenbiz",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WomenBiz - digital entrepreneurship platform for rural women. Frontend (seller + customer app), backend API (includes the admin API), shared domain types.",
+  "workspaces": [
+    "shared",
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c green,cyan \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm --workspace @shantai/backend run dev",
+    "dev:web": "npm --workspace @shantai/frontend run dev",
+    "build": "npm --workspace @shantai/backend run build && npm --workspace @shantai/frontend run build",
+    "typecheck": "npm --workspace @shantai/backend run typecheck && npm --workspace @shantai/frontend run typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "allowScripts": {
+    "esbuild": true
+  }
+}

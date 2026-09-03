@@ -1,0 +1,114 @@
+import type { Order, OrderStatus, PaymentMode, PaymentStatus } from './types.js'
+
+/**
+ * THE ORDER STATE MACHINE
+ * =======================
+ * Locked - six states, this order, no additions:
+ *
+ *   PLACED -> ACCEPTED -> PACKED -> OUT_FOR_DELIVERY -> DELIVERED -> COMPLETED
+ *
+ * Payment is deliberately NOT a step in this chain. It sits on its own axis,
+ * because a cash order and a UPI order have to walk the same six screens.
+ * Inserting a payment state into the middle is the change that would break it.
+ *
+ * The backend validates transitions against this table; the frontend draws its
+ * buttons from it. Neither hard-codes a status string.
+ */
+
+export const HAPPY_PATH: OrderStatus[] = [
+  'PLACED',
+  'ACCEPTED',
+  'PACKED',
+  'OUT_FOR_DELIVERY',
+  'DELIVERED',
+  'COMPLETED',
+]
+
+export interface SellerAction {
+  to: OrderStatus
+  labelKey: string
+  tone: 'primary' | 'ghost'
+  /** Requires the customer's delivery OTP. Only DELIVERED sets this. */
+  needsOtp?: boolean
+  needsReason?: boolean
+  confirmKey?: string
+  confirmSubKey?: string
+}
+
+export const SELLER_ACTIONS: Record<OrderStatus, SellerAction[]> = {
+  PLACED: [
+    { to: 'ACCEPTED', labelKey: 'ord.accept', tone: 'primary' },
+    { to: 'REJECTED', labelKey: 'ord.reject', tone: 'ghost', needsReason: true },
+  ],
+  ACCEPTED: [{ to: 'PACKED', labelKey: 'ord.markPacked', tone: 'primary' }],
+  PACKED: [
+    {
+      to: 'OUT_FOR_DELIVERY',
+      labelKey: 'ord.markOut',
+      tone: 'primary',
+      confirmKey: 'ord.confirmOut',
+      confirmSubKey: 'ord.confirmOutSub',
+    },
+  ],
+  OUT_FOR_DELIVERY: [
+    { to: 'DELIVERED', labelKey: 'ord.markDelivered', tone: 'primary', needsOtp: true },
+  ],
+  DELIVERED: [],
+  COMPLETED: [],
+  REJECTED: [],
+  CANCELLED: [],
+}
+
+/** Icon + tone per status. Colour is never the only signal; the word ships too. */
+export const STATUS_STYLE: Record<
+  OrderStatus,
+  { icon: string; tone: 'neutral' | 'info' | 'warn' | 'ok' | 'danger' }
+> = {
+  PLACED: { icon: '🔔', tone: 'warn' },
+  ACCEPTED: { icon: '👍', tone: 'info' },
+  PACKED: { icon: '📦', tone: 'info' },
+  OUT_FOR_DELIVERY: { icon: '🛵', tone: 'info' },
+  DELIVERED: { icon: '✅', tone: 'ok' },
+  COMPLETED: { icon: '✅', tone: 'ok' },
+  REJECTED: { icon: '✖', tone: 'danger' },
+  CANCELLED: { icon: '✖', tone: 'danger' },
+}
+
+export function statusLabelKey(status: OrderStatus): string {
+  return `ord.status.${status}`
+}
+
+export function stepIndex(status: OrderStatus): number {
+  return HAPPY_PATH.indexOf(status)
+}
+
+export function isCancelled(status: OrderStatus): boolean {
+  return status === 'REJECTED' || status === 'CANCELLED'
+}
+
+/** Server-side guard: is this transition legal from where the order is now? */
+export function canTransition(from: OrderStatus, to: OrderStatus): boolean {
+  return (SELLER_ACTIONS[from] || []).some((a) => a.to === to)
+}
+
+export function actionFor(from: OrderStatus, to: OrderStatus): SellerAction | undefined {
+  return (SELLER_ACTIONS[from] || []).find((a) => a.to === to)
+}
+
+/**
+ * Does this order need the seller to do something right now? Drives the action
+ * queue on My Business - the most important widget in the app.
+ */
+export function needsSellerAction(order: Order): boolean {
+  if (isCancelled(order.status)) return false
+  if (order.paymentMode === 'UPI' && order.paymentStatus === 'UPI_SUBMITTED') return true
+  return (SELLER_ACTIONS[order.status] || []).length > 0
+}
+
+export function customerCanCancel(status: OrderStatus): boolean {
+  return status === 'PLACED' || status === 'ACCEPTED'
+}
+
+export function initialPaymentStatus(mode: PaymentMode): PaymentStatus {
+  return mode === 'UPI' ? 'UPI_SUBMITTED' : 'COD_PENDING'
+}
