@@ -5,6 +5,7 @@ import { slotInfo } from '@shared/seller.js'
 import { useI18n, useT } from '../../i18n/I18nProvider.js'
 import { useAuth } from '../../store/AuthContext.js'
 import { api } from '../../lib/api.js'
+import QrCode from '../../components/QrCode.js'
 import {
   AppBar, AudioHelpButton, Button, Card, Choice, ConfirmSheet, EmptyState,
   Loading, Notice, Pill, Rupees, SectionTitle, SlotMeter, useAsync,
@@ -109,6 +110,18 @@ export function SellerProfile() {
                 {seller.upiVerified ? t('prof.verified') : t('prof.notVerified')}
               </Pill>
             </div>
+
+            {/* The payment QR is its own step - say plainly whether it is done. */}
+            {seller.upiQrReady ? (
+              <Button variant="ghost" size="sm" onClick={() => nav('/seller/payment')}>
+                🔳 {t('qrpay.title')}
+              </Button>
+            ) : (
+              <>
+                <Notice tone="warn">{t('qrpay.empty')}</Notice>
+                <Button onClick={() => nav('/seller/payment')}>{t('qrpay.add')}</Button>
+              </>
+            )}
           </div>
         </Card>
 
@@ -376,16 +389,7 @@ export function SellerQr() {
             <div style={{ fontSize: '2.5rem' }} aria-hidden="true">{seller.photo}</div>
             <strong style={{ fontSize: 'var(--t-md)' }}>{seller.shopName}</strong>
             <div className="tiny num dim">{seller.womenBizId}</div>
-            <div
-              style={{
-                aspectRatio: 1, maxWidth: 190, margin: '0 auto',
-                background: 'var(--surface-2)', border: '1px solid var(--line)',
-                borderRadius: 'var(--r)', display: 'grid', placeItems: 'center',
-                fontSize: '3.5rem',
-              }}
-            >
-              🔳
-            </div>
+            <QrCode value={shareUrl} label={t('qr.title')} />
             <div className="small" style={{ fontWeight: 600 }}>स्कॅन करा आणि ऑर्डर करा</div>
             <div className="tiny dim" style={{ wordBreak: 'break-all' }}>{shareUrl}</div>
           </div>

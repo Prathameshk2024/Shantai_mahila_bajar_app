@@ -3,6 +3,7 @@ import type { AdminStats, ReadinessBand } from '@shared/types.js'
 import { PLAN, slotInfo } from '@shared/seller.js'
 import { BAND_LABEL } from '@shared/readiness.js'
 import { getDb, save } from '../db/store.js'
+import { sellerStatusAfterReject } from '../db/payments.js'
 import { requireRole } from '../middleware/auth.js'
 
 /**
@@ -183,8 +184,10 @@ adminRouter.post('/payments/:id/reject', (req, res) => {
   payment.verifiedAt = new Date().toISOString()
   payment.verifiedBy = req.auth!.userId
 
+  // Not unconditionally PAYMENT_REJECTED: clearing a duplicate submission off
+  // the queue must not revoke an account another payment already paid for.
   const seller = db.sellers.find((s) => s.id === payment.sellerId)
-  if (seller) seller.status = 'PAYMENT_REJECTED'
+  if (seller) seller.status = sellerStatusAfterReject(seller, db.payments, payment.id)
   save()
   res.json({ payment })
 })

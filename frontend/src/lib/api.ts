@@ -1,5 +1,5 @@
 import type {
-  Address, AdminPaymentAccount, Category, DigitalProfile, Order, Product,
+  Address, AdminPaymentAccount, Category, Customer, DigitalProfile, Order, Product,
   Seller, SellerGroup, SellerWeek, Session, SubscriptionPayment,
 } from '@shared/types.js'
 import type { SlotInfo } from '@shared/seller.js'
@@ -58,7 +58,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
 
   const text = await res.text()
-  const body = text ? JSON.parse(text) : {}
+
+  let body: Record<string, unknown> = {}
+  if (text) {
+    try {
+      body = JSON.parse(text) as Record<string, unknown>
+    } catch {
+      // A non-JSON body means something other than our API answered - almost
+      // always the Vite dev proxy reporting that the backend is not running,
+      // which arrives as a 500 with an HTML body. Without this branch the
+      // JSON.parse throws and the real status is lost behind "Network error".
+      throw new ApiError(res.status, {
+        error: `API did not respond (HTTP ${res.status}) - is the backend running on :4000?`,
+        messageMr: 'सर्व्हरशी संपर्क होत नाही. थोड्या वेळाने पुन्हा प्रयत्न करा.',
+      })
+    }
+  }
 
   if (!res.ok) throw new ApiError(res.status, body)
   return body as T
@@ -93,6 +108,9 @@ export const api = {
 
   updateMe: (patchBody: Partial<Seller>) =>
     patch<{ seller: Seller }>('/sellers/me', patchBody),
+
+  /** Her buyers, derived from her own orders. Never anybody else's. */
+  myBuyers: () => get<{ buyers: SellerBuyer[] }>('/sellers/me/buyers'),
 
   sellerBySlug: (slug: string) => get<{ seller: Seller }>(`/sellers/slug/${slug}`),
   sellerById: (id: string) => get<{ seller: Seller }>(`/sellers/${id}`),
@@ -138,7 +156,36 @@ export const api = {
   },
 
   product: (id: string) => get<{ product: Product; seller?: Seller }>(`/catalog/products/${id}`),
-  addresses: () => get<{ addresses: Address[] }>('/catalog/addresses'),
+
+  /** Is this pincode covered by any open seller? Derived, never a static list. */
+  serviceability: (pincode: string) =>
+    get<{
+      pincode: string
+      serviceable: boolean
+      sellerCount: number
+      productCount: number
+      nearbyVillages: string[]
+    }>(`/catalog/serviceability?pincode=${encodeURIComponent(pincode)}`),
+
+  /* ---------------- her own record ---------------- */
+
+  /**
+   * Her customer record, addresses included. Created empty on first call.
+   *
+   * This replaced `addresses()`, which hit an unauthenticated endpoint and
+   * returned the same two seeded addresses to everybody.
+   */
+  customerMe: () => get<{ customer: Customer }>('/customers/me'),
+
+  updateCustomerMe: (name: string) => patch<{ customer: Customer }>('/customers/me', { name }),
+
+  addAddress: (body: AddressInput) =>
+    post<{ address: Address }>('/customers/me/addresses', body),
+
+  updateAddress: (id: string, body: Partial<AddressInput>) =>
+    patch<{ address: Address }>(`/customers/me/addresses/${id}`, body),
+
+  deleteAddress: (id: string) => del<{ ok: true }>(`/customers/me/addresses/${id}`),
 
   /* ---------------- orders ---------------- */
 
@@ -161,6 +208,26 @@ export const api = {
   /* ---------------- analytics ---------------- */
 
   sellerWeek: (id: string) => get<{ week: SellerWeek | null }>(`/analytics/seller/${id}/week`),
+}
+
+/** One row of the seller's "My Buyers" screen. Derived server-side. */
+export interface SellerBuyer {
+  customerId: string
+  name: string
+  phone: string
+  orderCount: number
+  totalSpent: number
+  lastOrderAt: string
+  lastAddress: string
+  pincode: string
+}
+
+export interface AddressInput {
+  label?: string
+  line: string
+  landmark?: string
+  pincode: string
+  isDefault?: boolean
 }
 
 export interface SellerRegistration {

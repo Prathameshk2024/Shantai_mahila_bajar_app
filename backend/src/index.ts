@@ -7,13 +7,18 @@ import { productsRouter } from './routes/products.routes.js'
 import { catalogRouter } from './routes/catalog.routes.js'
 import { ordersRouter } from './routes/orders.routes.js'
 import { adminRouter } from './routes/admin.routes.js'
-import { resetDb } from './db/store.js'
+import { flush, initStore, resetDb } from './db/store.js'
+import { uploadsRouter } from './routes/uploads.routes.js'
+import { customersRouter } from './routes/customers.routes.js'
+import { CORS_ORIGIN, describeConfig, PORT as CONFIG_PORT } from './config.js'
 import { SELLER_WEEK_SEED } from './db/seed.js'
 
 const app = express()
-const PORT = Number(process.env.PORT ?? 4000)
+const PORT = CONFIG_PORT
 
-app.use(cors({ origin: process.env.CORS_ORIGIN ?? true }))
+// A LIST, not a string: the seller/customer app and the admin site are
+// deployed to different origins and both call this one API.
+app.use(cors({ origin: CORS_ORIGIN }))
 app.use(express.json({ limit: '2mb' }))
 app.use(attachAuth)
 
@@ -25,7 +30,9 @@ app.use('/api/auth', authRouter)
 app.use('/api/sellers', sellersRouter)
 app.use('/api/products', productsRouter)
 app.use('/api/catalog', catalogRouter)
+app.use('/api/customers', customersRouter)
 app.use('/api/orders', ordersRouter)
+app.use('/api/uploads', uploadsRouter)
 
 // Admin has no frontend in this repo by design - the admin site is separate.
 app.use('/api/admin', adminRouter)
@@ -58,8 +65,29 @@ app.use((err: Error & { status?: number }, _req: Request, res: Response, _next: 
   })
 })
 
-app.listen(PORT, () => {
-  console.log(`\n  Shanta Mahila Bazar API   http://localhost:${PORT}/api/health`)
-  console.log(`  Admin API      http://localhost:${PORT}/api/admin/*  (backend only)`)
-  console.log(`  OTP mode       ${process.env.MSG91_AUTH_KEY ? 'MSG91' : 'demo (any 4 digits)'}\n`)
+/**
+ * The store must finish loading before the first request. Otherwise a handler
+ * can read seed data and then persist it straight over a real Firestore.
+ */
+async function main() {
+  await initStore()
+
+  app.listen(PORT, () => {
+    console.log(`\n  Shanta Mahila Bazar API   http://localhost:${PORT}/api/health`)
+    console.log(`  Admin API      http://localhost:${PORT}/api/admin/*  (backend only)`)
+    console.log(describeConfig())
+    console.log('')
+  })
+}
+
+// Writes are coalesced over 400ms, so a shutdown mid-window would lose them.
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    void flush().finally(() => process.exit(0))
+  })
+}
+
+main().catch((err) => {
+  console.error('\n  Failed to start:', (err as Error).message)
+  process.exit(1)
 })

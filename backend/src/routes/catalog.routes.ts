@@ -55,6 +55,13 @@ catalogRouter.get('/products', (req, res) => {
         ratingCount: s.ratingCount,
         deliveryFee: s.deliveryFee,
         freeDeliveryAbove: s.freeDeliveryAbove,
+        minOrder: s.minOrder,
+        // The cart and checkout run entirely off this card: serviceability
+        // needs the pincode list, and the UPI block needs her handle and
+        // whether she has actually set her payment QR up.
+        pincodes: s.pincodes,
+        upiId: s.upiId,
+        upiQrReady: s.upiQrReady,
         fssai: s.fssai,
       },
     }
@@ -74,9 +81,9 @@ catalogRouter.get('/products/:id', (req, res) => {
   res.json({ product, seller })
 })
 
-catalogRouter.get('/addresses', (_req, res) => {
-  res.json({ addresses: getDb().addresses })
-})
+// GET /addresses used to live here. It had no auth check and returned the same
+// two seeded addresses to every caller, which checkout then showed as "your
+// saved addresses". Addresses belong to a customer now: GET /api/customers/me.
 
 /**
  * Share-QR landing. Records the scan, then the client redirects to the shop.
@@ -92,4 +99,50 @@ catalogRouter.post('/share/:slug/scan', (req, res) => {
   }
   seller.qrScans += 1
   res.json({ ok: true, shopSlug: seller.shopSlug })
+})
+
+/**
+ * Pincode serviceability.
+ *
+ * Derived from the sellers who actually cover the pincode, never a static
+ * list: a pincode is "serviceable" exactly when at least one ACTIVE, open
+ * seller delivers there and has something live to sell. The customer app asks
+ * this once, stores the answer, and every later screen reuses it.
+ */
+catalogRouter.get('/serviceability', (req, res) => {
+  const pincode = String(req.query.pincode ?? '').trim()
+
+  if (!/^[1-9]\d{5}$/.test(pincode)) {
+    res.status(400).json({
+      error: 'Invalid pincode',
+      messageMr: '6 अंकी पिनकोड टाका',
+      fields: { pincode: 'invalid' },
+    })
+    return
+  }
+
+  const db = getDb()
+  const sellers = db.sellers.filter(
+    (s) => s.status === 'ACTIVE' && s.isOpen && s.pincodes.includes(pincode),
+  )
+  const sellerIds = new Set(sellers.map((s) => s.id))
+  const productCount = db.products.filter(
+    (p) => p.status === 'LIVE' && sellerIds.has(p.sellerId),
+  ).length
+
+  res.json({
+    pincode,
+    serviceable: sellers.length > 0 && productCount > 0,
+    sellerCount: sellers.length,
+    productCount,
+    // Shown when nothing is available, so she knows where the platform HAS
+    // reached rather than just being told "no".
+    nearbyVillages: [
+      ...new Set(
+        db.sellers
+          .filter((s) => s.status === 'ACTIVE' && s.isOpen)
+          .flatMap((s) => s.pincodes.map((pc) => `${s.village} (${pc})`)),
+      ),
+    ].slice(0, 6),
+  })
 })

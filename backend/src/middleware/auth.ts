@@ -1,17 +1,27 @@
+import crypto from 'node:crypto'
 import type { NextFunction, Request, Response } from 'express'
 import type { Role } from '@shared/types.js'
+import { SESSION_SECRET } from '../config.js'
 
 /**
  * Session handling.
  *
- * The token here is a base64 blob, NOT a signed credential - anyone could forge
- * one. That is acceptable in the skeleton and unacceptable in production.
+ * The token is `base64url(payload).base64url(HMAC-SHA256(payload))`. The
+ * payload is readable by anyone holding the token - it is not encrypted - but
+ * it cannot be edited, because changing a byte invalidates the signature.
  *
- * To go live: your Node endpoint verifies the OTP with MSG91, mints a Firebase
- * custom token, and the client signs in with it. This middleware then becomes
- * `getAuth().verifyIdToken(bearer)` and `req.auth` comes from the decoded
- * claims. Admin is gated by a custom claim, and the same rule is repeated in
- * Firestore security rules - never in the UI alone.
+ * That matters more than it looks: the payload carries the customer id, and
+ * the customer id is what /api/customers/me resolves her saved home addresses
+ * from. Before signing, editing one base64 string was enough to read another
+ * woman's address.
+ *
+ * Who she is still comes from the MSG91 OTP check at login. This only stops
+ * the session she was issued from being rewritten afterwards.
+ *
+ * To go live on Firebase Auth instead: mint a Firebase custom token after the
+ * OTP check and have the client sign in with it; this middleware then becomes
+ * `getAuth().verifyIdToken(bearer)`. Admin is gated by a custom claim, and the
+ * same rule is repeated in Firestore security rules - never in the UI alone.
  */
 
 export interface AuthContext {
@@ -31,14 +41,30 @@ declare global {
   }
 }
 
+function sign(payload: string): string {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url')
+}
+
 export function signToken(ctx: AuthContext): string {
-  return Buffer.from(JSON.stringify(ctx), 'utf8').toString('base64url')
+  const payload = Buffer.from(JSON.stringify(ctx), 'utf8').toString('base64url')
+  return `${payload}.${sign(payload)}`
 }
 
 export function verifyToken(token: string): AuthContext | null {
   try {
-    const raw = Buffer.from(token, 'base64url').toString('utf8')
-    const parsed = JSON.parse(raw) as AuthContext
+    const dot = token.indexOf('.')
+    // No separator means the old unsigned format, or a hand-crafted blob.
+    if (dot < 1) return null
+
+    const payload = token.slice(0, dot)
+    const provided = token.slice(dot + 1)
+    const expected = sign(payload)
+
+    // timingSafeEqual throws on a length mismatch, so check that first.
+    if (provided.length !== expected.length) return null
+    if (!crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected))) return null
+
+    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as AuthContext
     if (!parsed?.role || !parsed?.userId) return null
     return parsed
   } catch {

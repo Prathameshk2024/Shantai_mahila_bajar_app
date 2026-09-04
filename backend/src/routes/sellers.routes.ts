@@ -6,6 +6,7 @@ import {
 import { makeShopSlug, makeWomenBizId, villageCode } from '@shared/womenbiz.js'
 import { computeReadiness, readinessBand, recomputeForSeller } from '@shared/readiness.js'
 import { getDb, newId, save } from '../db/store.js'
+import { buyersForSeller } from '../db/customers.js'
 import { ADMIN_PAYMENT_ACCOUNT } from '../db/seed.js'
 import { requireRole, signToken } from '../middleware/auth.js'
 
@@ -168,6 +169,18 @@ sellersRouter.get('/me', requireRole('seller'), (req, res) => {
   res.json({ seller, slots: slotInfo(seller, products) })
 })
 
+/**
+ * Her buyers, derived from her own orders.
+ *
+ * Nothing here is new to her: an order detail screen already shows the name,
+ * address and phone of whoever placed it. This gathers them so she can see who
+ * comes back, which is the thing a shopkeeper knows by memory and an app owner
+ * otherwise never learns.
+ */
+sellersRouter.get('/me/buyers', requireRole('seller'), (req, res) => {
+  res.json({ buyers: buyersForSeller(getDb(), req.auth!.sellerId!) })
+})
+
 sellersRouter.patch('/me', requireRole('seller'), (req, res) => {
   const db = getDb()
   const i = db.sellers.findIndex((s) => s.id === req.auth!.sellerId)
@@ -182,6 +195,7 @@ sellersRouter.patch('/me', requireRole('seller'), (req, res) => {
     'name', 'photo', 'whatsapp', 'about', 'shopName', 'isOpen', 'deliveryFee',
     'freeDeliveryAbove', 'minOrder', 'dispatch', 'pincodes', 'monthlyCapacity',
     'age', 'education', 'yearsInBusiness', 'shgName', 'digital',
+    'upiQrUrl', 'upiQrReady',
   ] as const
 
   const current = db.sellers[i]!

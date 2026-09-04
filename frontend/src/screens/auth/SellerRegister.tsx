@@ -11,7 +11,7 @@ import { useAuth } from '../../store/AuthContext.js'
 import { api, ApiError } from '../../lib/api.js'
 import {
   AppBar, AudioHelpButton, Button, Card, Choice, Dots, Field, Notice,
-  Rupees, TextInput, VoiceInput, YesNo,
+  TextInput, VoiceInput, YesNo,
 } from '../../components/ui.js'
 
 /**
@@ -47,8 +47,6 @@ interface Draft {
   fssai: string
   fssaiExpiry: string
   upiId: string
-  deliveryFee: string
-  minOrder: string
   dispatch: DispatchTime
   digital: Partial<DigitalProfile>
 }
@@ -59,7 +57,7 @@ const EMPTY: Draft = {
   shopName: '', businessType: 'individual', shgName: '',
   yearsInBusiness: '', monthlyCapacity: '', about: '',
   sellsFood: null, fssai: '', fssaiExpiry: '',
-  upiId: '', deliveryFee: '0', minOrder: '0', dispatch: 'same',
+  upiId: '', dispatch: 'same',
   digital: {},
 }
 
@@ -161,8 +159,6 @@ export default function SellerRegister() {
         fssai: d.sellsFood ? d.fssai : undefined,
         fssaiExpiry: d.sellsFood ? d.fssaiExpiry : undefined,
         upiId: d.upiId.trim(),
-        deliveryFee: Number(d.deliveryFee || 0),
-        minOrder: Number(d.minOrder || 0),
         dispatch: d.dispatch,
         digital: {
           smartphone: !!d.digital.smartphone,
@@ -393,7 +389,6 @@ export default function SellerRegister() {
               <div className="stack-sm">
                 <Choice selected={d.businessType === 'individual'} onSelect={() => set('businessType', 'individual')} icon="👤" title={t('reg.bizIndividual')} />
                 <Choice selected={d.businessType === 'shg'} onSelect={() => set('businessType', 'shg')} icon="👭" title={t('reg.bizShg')} />
-                <Choice selected={d.businessType === 'udyam'} onSelect={() => set('businessType', 'udyam')} icon="📄" title={t('reg.bizUdyam')} />
               </div>
             </Field>
 
@@ -537,25 +532,6 @@ export default function SellerRegister() {
               </Notice>
             )}
 
-            <div className="row" style={{ gap: 'var(--s3)', alignItems: 'flex-start' }}>
-              <Field label={t('reg.deliveryFee')} hint={t('reg.deliveryFeeHint')} htmlFor="df">
-                <TextInput
-                  id="df"
-                  inputMode="numeric"
-                  value={d.deliveryFee}
-                  onChange={(e) => set('deliveryFee', e.target.value.replace(/\D/g, ''))}
-                />
-              </Field>
-              <Field label={t('reg.minOrder')} htmlFor="mo">
-                <TextInput
-                  id="mo"
-                  inputMode="numeric"
-                  value={d.minOrder}
-                  onChange={(e) => set('minOrder', e.target.value.replace(/\D/g, ''))}
-                />
-              </Field>
-            </div>
-
             <Field label={t('reg.dispatch')} required>
               <div className="stack-sm">
                 <Choice selected={d.dispatch === 'same'} onSelect={() => set('dispatch', 'same')} title={t('reg.dispatchSame')} />
@@ -586,14 +562,13 @@ export default function SellerRegister() {
                 <Row label={t('reg.village')} value={village} />
                 <Row label={t('reg.pincode')} value={d.pincode} />
                 <Row label={t('reg.shopName')} value={d.shopName} />
-                <Row label={t('reg.businessType')} value={t(`reg.biz${d.businessType === 'shg' ? 'Shg' : d.businessType === 'udyam' ? 'Udyam' : 'Individual'}`)} />
+                <Row label={t('reg.businessType')} value={t(d.businessType === 'shg' ? 'reg.bizShg' : 'reg.bizIndividual')} />
                 {d.shgName && <Row label={t('reg.shgName')} value={d.shgName} />}
                 {d.yearsInBusiness && <Row label={t('reg.years')} value={`${d.yearsInBusiness} ${t('reg.yearsUnit')}`} />}
                 {d.monthlyCapacity && <Row label={t('reg.capacity')} value={d.monthlyCapacity} />}
                 <Row label={t('reg.sellsFood')} value={d.sellsFood ? t('common.yes') : t('common.no')} />
                 {d.sellsFood && <Row label={t('reg.fssai')} value={d.fssai} />}
                 <Row label={t('reg.upiLabel')} value={d.upiId} />
-                <Row label={t('reg.deliveryFee')} value={<Rupees value={Number(d.deliveryFee || 0)} />} />
               </div>
             </Card>
 

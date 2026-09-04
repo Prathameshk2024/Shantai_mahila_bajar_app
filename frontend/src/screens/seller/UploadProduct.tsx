@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Category, Unit } from '@shared/types.js'
-import { isValidFssai, slotInfo } from '@shared/seller.js'
+import { slotInfo } from '@shared/seller.js'
 import { useI18n, useT } from '../../i18n/I18nProvider.js'
 import { api, ApiError } from '../../lib/api.js'
+import PhotoPicker from '../../components/PhotoPicker.js'
+import ProductImage from '../../components/ProductImage.js'
 import {
   AppBar, AudioHelpButton, Button, Card, Choice, Dots, EmptyState, Field,
   Loading, Notice, Rupees, TextInput, VoiceInput, useAsync,
@@ -39,11 +41,11 @@ export default function UploadProduct() {
 
   const [d, setD] = useState({
     emoji: '',
+    imageUrl: '',
+    imagePublicId: '',
     name: '',
     categoryId: '',
     isFood: null as boolean | null,
-    fssai: '',
-    fssaiExpiry: '',
     ingredients: '',
     vegType: '' as '' | 'veg' | 'nonveg',
     material: '',
@@ -121,14 +123,12 @@ export default function UploadProduct() {
 
   function validate(which: (typeof STEPS)[number]): boolean {
     const e: Record<string, string> = {}
-    if (which === 'photo' && !d.emoji) e.emoji = t('common.required')
+    if (which === 'photo' && !d.emoji && !d.imageUrl) e.emoji = t('common.required')
     if (which === 'basics' && !d.name.trim()) e.name = t('common.required')
     if (which === 'food' && d.isFood === null) e.isFood = t('common.required')
     if (which === 'details') {
       if (!d.categoryId) e.categoryId = t('common.required')
       if (d.isFood) {
-        if (!isValidFssai(d.fssai)) e.fssai = t('prod.fssaiInvalid')
-        if (!d.fssaiExpiry) e.fssaiExpiry = t('common.required')
         if (!d.ingredients.trim()) e.ingredients = t('common.required')
         if (!d.vegType) e.vegType = t('common.required')
       } else if (!d.material.trim()) {
@@ -151,12 +151,12 @@ export default function UploadProduct() {
     setServerError('')
     try {
       await api.createProduct({
-        emoji: d.emoji,
+        emoji: d.emoji || '📦',
+        imageUrl: d.imageUrl || undefined,
+        imagePublicId: d.imagePublicId || undefined,
         name: d.name.trim(),
         categoryId: d.categoryId,
         isFood: !!d.isFood,
-        fssai: d.isFood ? d.fssai : undefined,
-        fssaiExpiry: d.isFood ? d.fssaiExpiry : undefined,
         ingredients: d.isFood ? d.ingredients : undefined,
         vegType: d.isFood && d.vegType ? d.vegType : undefined,
         material: d.isFood ? undefined : d.material,
@@ -197,11 +197,19 @@ export default function UploadProduct() {
         {/* ---------- 1. photo ---------------------------------- */}
         {STEPS[step] === 'photo' && (
           <Field label={t('prod.photos')} hint={t('prod.photosHint')} error={errors.emoji} required>
-            <Notice tone="info">
-              Skeleton build: pick a picture below. Wire this to the camera with
-              the Capacitor Camera plugin when you build the APK.
-            </Notice>
-            <div className="pgrid" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginTop: 'var(--s3)' }}>
+            <PhotoPicker
+              imageUrl={d.imageUrl || undefined}
+              onUploaded={(img) => {
+                setD((cur) => ({ ...cur, imageUrl: img.url, imagePublicId: img.publicId }))
+                setErrors((e) => ({ ...e, emoji: '' }))
+              }}
+              onCleared={() => setD((cur) => ({ ...cur, imageUrl: '', imagePublicId: '' }))}
+            />
+
+            {/* The emoji stays as the fallback: it is what shows before a photo
+                finishes uploading, and the only option if Cloudinary is off. */}
+            <div className="small dim" style={{ marginTop: 'var(--s4)' }}>{t('photo.orPick')}</div>
+            <div className="pgrid" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginTop: 'var(--s2)' }}>
               {EMOJIS.map((e) => (
                 <button
                   key={e}
@@ -269,29 +277,16 @@ export default function UploadProduct() {
 
             {d.isFood ? (
               <>
-                <Notice tone="warn" title={t('prod.fssai')}>{t('prod.fssaiWhy')}</Notice>
-
-                <Field label={t('prod.fssai')} hint={t('prod.fssaiHint')} error={errors.fssai} required htmlFor="fssai">
-                  <TextInput
-                    id="fssai"
-                    inputMode="numeric"
-                    maxLength={14}
-                    value={d.fssai}
-                    error={!!errors.fssai}
-                    onChange={(e) => set('fssai', e.target.value.replace(/\D/g, ''))}
-                    placeholder="21522004000123"
-                  />
-                </Field>
-
-                <Field label={t('prod.fssaiExpiry')} hint={t('prod.fssaiExpiryHint')} error={errors.fssaiExpiry} required htmlFor="fx">
-                  <TextInput
-                    id="fx"
-                    type="date"
-                    value={d.fssaiExpiry}
-                    error={!!errors.fssaiExpiry}
-                    onChange={(e) => set('fssaiExpiry', e.target.value)}
-                  />
-                </Field>
+                {/* FSSAI is collected ONCE, during registration, and lives on
+                    the seller record. Asking again per product would be a
+                    second source of truth for the same licence. Shown here so
+                    she can see which licence this listing will carry. */}
+                <Notice tone="ok" title={t('prod.fssai')}>
+                  <span className="num" style={{ fontWeight: 700 }}>{seller.fssai}</span>
+                  {seller.fssaiExpiry && (
+                    <span className="dim"> · {t('prod.fssaiExpiry')}: {seller.fssaiExpiry}</span>
+                  )}
+                </Notice>
 
                 <Field label={t('prod.ingredients')} hint={t('prod.ingredientsHint')} error={errors.ingredients} required>
                   <VoiceInput
@@ -396,9 +391,12 @@ export default function UploadProduct() {
             <div className="section-title">{t('prod.preview')}</div>
             <Card>
               <div className="row" style={{ alignItems: 'flex-start' }}>
-                <div className="tile__img" style={{ width: 80, height: 80, fontSize: '2.25rem' }}>
-                  {d.emoji}
-                </div>
+                <ProductImage
+                  src={d.imageUrl || undefined}
+                  emoji={d.emoji || '📦'}
+                  size={80}
+                  className="tile__img"
+                />
                 <div className="stack-sm grow" style={{ gap: 4 }}>
                   <strong style={{ fontSize: 'var(--t-md)' }}>{d.name}</strong>
                   <div className="row" style={{ gap: 8 }}>
@@ -418,7 +416,7 @@ export default function UploadProduct() {
 
               {d.isFood ? (
                 <div className="stack-sm small">
-                  <div><span className="dim">{t('cus.fssaiNo')}: </span><span className="num">{d.fssai}</span></div>
+                  <div><span className="dim">{t('cus.fssaiNo')}: </span><span className="num">{seller.fssai}</span></div>
                   <div><span className="dim">{t('cus.ingredients')}: </span>{d.ingredients}</div>
                 </div>
               ) : (

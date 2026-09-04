@@ -80,8 +80,11 @@ export interface Order {
   paymentStatus: PaymentStatus
   paymentUtr?: string
   status: OrderStatus
-  /** The customer's 4-digit code. The seller must enter it to close the order. */
-  deliveryOtp: string
+  /**
+   * Legacy. Delivery no longer requires an OTP; kept optional so orders
+   * already stored with one still parse. Nothing reads it.
+   */
+  deliveryOtp?: string
   placedAt: string
   events: OrderEvent[]
   sourceShareCode?: string
@@ -149,9 +152,14 @@ export interface Seller {
   fssai?: string
   fssaiExpiry?: string
 
-  // money in
+  // money in. `upiId` is collected at registration because she cannot be paid
+  // without it. The payment QR is a SEPARATE, later step: it is generated from
+  // that UPI ID (or she uploads her bank's own QR image), and `upiQrReady`
+  // records that she has actually been through that step.
   upiId: string
   upiVerified: boolean
+  upiQrUrl?: string
+  upiQrReady?: boolean
 
   // digital readiness
   digital: DigitalProfile
@@ -195,7 +203,12 @@ export type Unit = 'kg' | 'g' | 'piece' | 'dozen' | 'litre' | 'ml' | 'set'
 export interface Product {
   id: string
   sellerId: string
+  /** Fallback shown until a real photo exists, and if one fails to load. */
   emoji: string
+  /** Cloudinary secure_url. Read through the LRU cache, never fetched directly. */
+  imageUrl?: string
+  /** Cloudinary public_id, so a replaced photo can be deleted from the account. */
+  imagePublicId?: string
   name: string
   nameEn?: string
   categoryId: string
@@ -272,9 +285,37 @@ export interface Address {
   label: string
   line: string
   landmark?: string
-  city: string
+  /**
+   * Optional: an order captures a line, a landmark and a pincode but never a
+   * city, so an address recovered from one has none to give.
+   */
+  city?: string
   pincode: string
   isDefault: boolean
+}
+
+/**
+ * A customer, keyed by phone number.
+ *
+ * Her addresses live inside this document rather than in a collection of their
+ * own. She has two or three, they are only ever read alongside the rest of her
+ * record, and embedding keeps a checkout write atomic instead of split across
+ * two documents.
+ *
+ * Deliberately absent: order counts and spending totals. Those are derived
+ * from `orders` when they are needed. A stored counter goes wrong the first
+ * time an order is cancelled, and goes wrong silently.
+ */
+export interface Customer {
+  /** `c-<phone>` - derived, so it always matches the id inside her token. */
+  id: string
+  phone: string
+  name: string
+  addresses: Address[]
+  createdAt: string
+  updatedAt: string
+  /** Reserved for admin moderation (Phase 3). Nothing reads it yet. */
+  blocked?: boolean
 }
 
 export interface CartItem {

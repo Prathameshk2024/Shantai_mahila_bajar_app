@@ -3,6 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import type { Product, Seller } from '@shared/types.js'
 import { useI18n, useT } from '../../i18n/I18nProvider.js'
 import { useCart } from '../../store/CartContext.js'
+import { usePincode } from '../../store/PincodeContext.js'
+import PincodeBar from '../../components/PincodeBar.js'
+import ProductImage from '../../components/ProductImage.js'
 import { api } from '../../lib/api.js'
 import {
   AppBar, Button, Card, EmptyState, Loading, Notice, Pill,
@@ -12,7 +15,7 @@ import {
 function ProductCard({ product, onOpen }: { product: Product; onOpen: () => void }) {
   return (
     <button className="pcard" onClick={onOpen}>
-      <div className="pcard__img" aria-hidden="true">{product.emoji}</div>
+      <ProductImage src={product.imageUrl} emoji={product.emoji} className="pcard__img" rounded="0" />
       <div className="pcard__body">
         <div className="pcard__name">{product.name}</div>
         <div className="pcard__price"><Rupees value={product.price} /></div>
@@ -25,9 +28,15 @@ export function Explore() {
   const t = useT()
   const nav = useNavigate()
   const { lang } = useI18n()
+  const { pincode } = usePincode()
   const [q, setQ] = useState('')
 
-  const [data, loading] = useAsync(() => api.catalog(), [])
+  // The catalog is filtered by her pincode, so what she sees is only what can
+  // actually reach her. Re-runs whenever she changes it.
+  const [data, loading] = useAsync(
+    () => api.catalog(pincode ? { pincode } : {}),
+    [pincode],
+  )
   const [catData] = useAsync(() => api.categories(), [])
 
   const products = data?.products ?? []
@@ -39,6 +48,8 @@ export function Explore() {
     <>
       <AppBar title={t('app.name')} sub={t('app.tagline')} />
       <div className="screen stack">
+        <PincodeBar />
+
         <TextInput
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -119,7 +130,11 @@ export function CategoryProducts() {
   const nav = useNavigate()
   const { lang } = useI18n()
 
-  const [data, loading] = useAsync(() => api.catalog({ categoryId }), [categoryId])
+  const { pincode } = usePincode()
+  const [data, loading] = useAsync(
+    () => api.catalog({ categoryId, ...(pincode ? { pincode } : {}) }),
+    [categoryId, pincode],
+  )
   const [catData] = useAsync(() => api.categories(), [])
   const cat = (catData?.categories ?? []).find((c) => c.id === categoryId)
   const products = data?.products ?? []
@@ -170,15 +185,12 @@ export function ProductDetail() {
     <>
       <AppBar title={product.name} onBack={() => nav(-1)} />
       <div className="screen stack">
-        <div
-          style={{
-            aspectRatio: 1, background: 'var(--surface-2)', borderRadius: 'var(--r-lg)',
-            display: 'grid', placeItems: 'center', fontSize: '6rem',
-            border: '1px solid var(--line)', maxWidth: 420, margin: '0 auto', width: '100%',
-          }}
-          aria-hidden="true"
-        >
-          {product.emoji}
+        <div style={{ maxWidth: 420, margin: '0 auto', width: '100%' }}>
+          <ProductImage
+            src={product.imageUrl}
+            emoji={product.emoji}
+            rounded="var(--r-lg)"
+          />
         </div>
 
         <div className="stack-sm">
@@ -370,7 +382,7 @@ export function SellerStore() {
                       font: 'inherit', color: 'inherit', textAlign: 'left', cursor: 'pointer',
                     }}
                   >
-                    <span className="prow__img" aria-hidden="true">{p.emoji}</span>
+                    <ProductImage src={p.imageUrl} emoji={p.emoji} size={74} className="prow__img" />
                     <span className="prow__body">
                       <span className="prow__name">{p.name}</span>
                       <span className="prow__meta">

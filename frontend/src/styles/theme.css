@@ -994,3 +994,60 @@ p, h1, h2, h3, li, span, div { overflow-wrap: anywhere; }
 /* Tables and pre blocks scroll inside themselves rather than
    widening the page. */
 pre, code { overflow-x: auto; max-width: 100%; }
+
+/* ============================================================
+   Shared voice button + live dictation banner
+   ============================================================ */
+.appbar__btn--rec {
+  background: #fff;
+  color: var(--maroon);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.voicebar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(var(--safe-t) + var(--bar-h) + var(--s2));
+  z-index: 60;
+  width: min(calc(100% - var(--s5)), 480px);
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  background: var(--ink);
+  color: #fff;
+  border-radius: var(--r-full);
+  padding: var(--s2) var(--s4);
+  font-size: var(--t-sm);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+.voicebar__dot {
+  width: 9px; height: 9px; flex: 0 0 auto;
+  border-radius: 50%;
+  background: #ff5b47;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+/* ============================================================
+   App bar at 360px
+   ------------------------------------------------------------
+   The bar can now hold back + audio-help + the shared mic. That
+   is 132px of controls before the title gets a pixel, so on the
+   smallest phones the buttons tighten and the title is allowed
+   to ellipsize rather than wrap the bar to two lines.
+   ============================================================ */
+@media (max-width: 400px) {
+  .appbar { gap: 2px; padding-left: var(--s2); padding-right: var(--s2); }
+  .appbar__btn { width: 40px; height: 40px; font-size: 1.15rem; }
+  .appbar__title { font-size: var(--t-base); }
+  .appbar__title,
+  .appbar__sub {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .voicebar { font-size: var(--t-xs); padding: var(--s2) var(--s3); }
+}
+
+/* The pincode bar keeps its button on the same row at every width. */
+.input-voice > .btn { flex: 0 0 auto; width: auto; }

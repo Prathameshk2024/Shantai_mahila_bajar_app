@@ -145,6 +145,75 @@ Set `ADMIN_PASSWORD` in the environment. The default is `changeme`.
 
 ---
 
+## Credentials (Firebase + Cloudinary)
+
+Copy `backend/.env.example` to `backend/.env` and fill it in. `.env` is
+gitignored; nothing secret belongs in the repo.
+
+**Everything is optional.** With an empty `.env` the app still runs: JSON-file
+database, emoji instead of photos, any 4-digit OTP. Each credential switches
+one piece on, and the boot banner tells you which are live:
+
+```
+  Database       Firestore (your-project)     ← or "JSON file (backend/data/db.json)"
+  Images         Cloudinary (your-cloud)      ← or "off - emoji only"
+  OTP            MSG91                        ← or "demo (any 4 digits)"
+```
+
+### Firebase
+
+Firebase console → Project settings → Service accounts → **Generate new private
+key**. Then either paste the three fields:
+
+```
+FIREBASE_PROJECT_ID=...
+FIREBASE_CLIENT_EMAIL=...@....iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
+MIIE...
+-----END PRIVATE KEY-----
+"
+```
+
+...or drop the whole downloaded JSON (raw or base64) into
+`FIREBASE_SERVICE_ACCOUNT` and leave those three blank.
+
+On first boot against an empty project the seed data is written in, so the
+collections exist and the app is immediately usable.
+
+Deploy the rules once: `firebase deploy --only firestore:rules`. They deny all
+client-SDK access, because every read and write goes through this API, which
+holds the real rules — slot limits, FSSAI-on-food, legal order transitions.
+
+> **One-instance limitation.** The API loads the whole dataset into memory and
+> writes changed documents back (diffed and batched, so a single order update
+> does not rewrite every seller). That keeps all 33 synchronous `getDb()` call
+> sites working and keeps read costs near zero — but two server instances would
+> each hold their own copy and overwrite each other. Pin the deployment to one
+> instance (`--max-instances=1` on Cloud Run). Past that scale, convert the
+> route handlers to async per-document reads.
+
+### Cloudinary
+
+Dashboard → Product Environment Credentials → copy the **API environment
+variable**:
+
+```
+CLOUDINARY_URL=cloudinary://<api_key>:<api_secret>@<cloud_name>
+```
+
+Photos upload **straight from the phone to Cloudinary**; the bytes never pass
+through this server. The API only issues a short-lived signature scoped to one
+folder, so the API secret stays server-side — an unsigned preset would let
+anyone on the internet fill your account.
+
+Before upload the browser downscales to 1200px / JPEG 0.75, turning a 4MB
+camera shot into roughly 200KB. On a village 4G connection that is the
+difference between a few seconds and the point where a seller gives up. On
+display, `f_auto,q_auto,c_fill,w_<rendered size>` fetches only the pixels
+actually shown, and that transformed URL is the LRU cache key.
+
+---
+
 ## Design rules (not preferences)
 
 From section 6 of the spec, baked into `frontend/src/styles/theme.css`:

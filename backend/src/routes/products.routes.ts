@@ -55,9 +55,12 @@ productsRouter.post('/', requireRole('seller'), (req, res) => {
   if (!b.price || Number(b.price) <= 0) fields.price = 'किंमत टाका'
 
   if (b.isFood) {
-    // Food asks exactly four things, and all four are mandatory.
-    if (!isValidFssai(b.fssai)) fields.fssai = 'FSSAI क्रमांक 14 अंकी असावा आणि 1 किंवा 2 ने सुरू व्हावा'
-    if (!b.fssaiExpiry) fields.fssaiExpiry = 'FSSAI मुदत संपण्याची तारीख आवश्यक आहे'
+    // FSSAI is NOT asked per product. It is collected once at registration and
+    // lives on the seller record; a per-product copy would be a second source
+    // of truth for the same licence. We validate hers and stamp it on below.
+    if (!isValidFssai(seller.fssai)) {
+      fields.fssai = 'तुमचा FSSAI क्रमांक नोंदणीत नाही. कृपया मदत केंद्राशी संपर्क करा.'
+    }
     if (!b.ingredients?.trim()) fields.ingredients = 'यात काय आहे ते सांगा'
     if (!b.vegType) fields.vegType = 'शाकाहारी की मांसाहारी ते निवडा'
   } else if (!b.material?.trim()) {
@@ -73,12 +76,15 @@ productsRouter.post('/', requireRole('seller'), (req, res) => {
     id: newId('p'),
     sellerId,
     emoji: b.emoji ?? '📦',
+    imageUrl: b.imageUrl,
+    imagePublicId: b.imagePublicId,
     name: (b.name ?? '').trim(),
     nameEn: b.nameEn,
     categoryId: b.categoryId ?? '',
     isFood: !!b.isFood,
-    fssai: b.isFood ? b.fssai : undefined,
-    fssaiExpiry: b.isFood ? b.fssaiExpiry : undefined,
+    // Stamped from her seller record - one source of truth.
+    fssai: b.isFood ? seller.fssai : undefined,
+    fssaiExpiry: b.isFood ? seller.fssaiExpiry : undefined,
     ingredients: b.isFood ? b.ingredients : undefined,
     vegType: b.isFood ? b.vegType : undefined,
     material: b.isFood ? undefined : b.material,
@@ -110,7 +116,8 @@ productsRouter.patch('/:id', requireRole('seller'), (req, res) => {
 
   const allowed = [
     'name', 'nameEn', 'emoji', 'categoryId', 'price', 'mrp', 'unit', 'stock',
-    'madeToOrder', 'ingredients', 'vegType', 'material', 'fssai', 'fssaiExpiry',
+    'madeToOrder', 'ingredients', 'vegType', 'material',
+    'imageUrl', 'imagePublicId',
   ] as const
 
   const patch: Record<string, unknown> = {}

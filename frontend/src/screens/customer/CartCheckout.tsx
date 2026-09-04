@@ -6,7 +6,10 @@ import { buildUpiLink } from '@shared/seller.js'
 import { useI18n, useT } from '../../i18n/I18nProvider.js'
 import { useAuth } from '../../store/AuthContext.js'
 import { useCart } from '../../store/CartContext.js'
+import { usePincode } from '../../store/PincodeContext.js'
 import { api, ApiError } from '../../lib/api.js'
+import QrCode from '../../components/QrCode.js'
+import { AddressForm } from '../../components/AddressForm.js'
 import {
   AppBar, Button, Card, Choice, EmptyState, Field, Loading, Notice,
   Pill, Rupees, SectionTitle, Stepper, TextInput, useAsync,
@@ -128,6 +131,15 @@ function dedupeSellers(products: { seller?: Partial<Seller> }[]): Partial<Seller
   return [...map.values()]
 }
 
+/**
+ * One line of address text. `city` is optional now: an address recovered from
+ * an order has a line, a landmark and a pincode, but orders never captured a
+ * city, so joining it in unguarded printed "..., undefined - 413601".
+ */
+function addressLine(a: Address): string {
+  return [a.line, a.city].filter(Boolean).join(', ') + ` - ${a.pincode}`
+}
+
 /* ================================================================== */
 /* Checkout - address, then a payment step PER SELLER                   */
 /* ================================================================== */
@@ -139,23 +151,46 @@ export function Checkout() {
   const { groupBySeller, clear } = useCart()
 
   const [catalogData, loadingCatalog] = useAsync(() => api.catalog(), [])
-  const [addrData, loadingAddr] = useAsync(() => api.addresses(), [])
+  const [customerData, loadingCustomer, setCustomerData] = useAsync(() => api.customerMe(), [])
 
+  const { pincode: savedPincode } = usePincode()
   const [addressId, setAddressId] = useState<string | null>(null)
+  const [addingAddress, setAddingAddress] = useState(false)
+  const [savingAddress, setSavingAddress] = useState(false)
   const [mode, setMode] = useState<'COD' | 'UPI'>('COD')
   const [utr, setUtr] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
-  if (loadingCatalog || loadingAddr) {
+  if (loadingCatalog || loadingCustomer) {
     return <><AppBar title={t('cus.checkout')} backTo="/shop/cart" /><div className="screen"><Loading /></div></>
   }
 
-  const addresses: Address[] = addrData?.addresses ?? []
+  const customer = customerData?.customer
+  const addresses: Address[] = customer?.addresses ?? []
+
+  /** Save a newly typed address, then select it so she can carry straight on. */
+  async function saveAddress(input: Parameters<typeof api.addAddress>[0]) {
+    setSavingAddress(true)
+    setErr('')
+    try {
+      const res = await api.addAddress(input)
+      setAddressId(res.address.id)
+      setAddingAddress(false)
+      setCustomerData(await api.customerMe())
+    } catch (e) {
+      setErr(e instanceof ApiError ? (e.messageMr ?? e.message) : 'Network error')
+    } finally {
+      setSavingAddress(false)
+    }
+  }
   const sellers = dedupeSellers(catalogData?.products ?? [])
   const groups = groupBySeller(sellers)
   const address =
     addresses.find((a) => a.id === addressId) ??
+    // She already told us her pincode on Explore - default to the address that
+    // matches it rather than making her pick again.
+    addresses.find((a) => a.pincode === savedPincode) ??
     addresses.find((a) => a.isDefault) ??
     addresses[0]
   const grand = groups.reduce((n, g) => n + g.total, 0)
@@ -175,7 +210,10 @@ export function Checkout() {
         groups,
         paymentMode: mode,
         paymentUtr: mode === 'UPI' ? utr : undefined,
-        customerName: session?.name ?? 'ग्राहक',
+        // Her stored name first: the session falls back to the ग्राहक
+        // placeholder, and sending that would overwrite nothing but tell the
+        // seller nothing either.
+        customerName: customer?.name || session?.name || 'ग्राहक',
       })
       clear()
       nav(`/shop/placed/${res.orders[0]!.id}`, { replace: true })
@@ -191,19 +229,44 @@ export function Checkout() {
       <AppBar title={t('cus.checkout')} backTo="/shop/cart" />
       <div className="screen stack">
         <div>
-          <SectionTitle>{t('cus.chooseAddress')}</SectionTitle>
-          <div className="stack-sm">
-            {addresses.map((a) => (
-              <Choice
-                key={a.id}
-                selected={address?.id === a.id}
-                onSelect={() => setAddressId(a.id)}
-                icon={a.label === 'घर' ? '🏠' : '🏢'}
-                title={a.label}
-                sub={`${a.line}, ${a.city} - ${a.pincode}`}
+          <SectionTitle>
+            {addresses.length === 0 ? t('cus.firstAddress') : t('cus.chooseAddress')}
+          </SectionTitle>
+
+          {/*
+            Her first order has no address to pick, so the form IS the step.
+            Before customers had records of their own this screen showed two
+            seeded addresses belonging to nobody, and there was no way to enter
+            one - an empty picker here would simply block checkout.
+          */}
+          {addresses.length === 0 || addingAddress ? (
+            <Card>
+              {addresses.length === 0 && (
+                <p className="small dim">{t('cus.firstAddressSub')}</p>
+              )}
+              <AddressForm
+                busy={savingAddress}
+                onSubmit={saveAddress}
+                onCancel={addresses.length > 0 ? () => setAddingAddress(false) : undefined}
               />
-            ))}
-          </div>
+            </Card>
+          ) : (
+            <div className="stack-sm">
+              {addresses.map((a) => (
+                <Choice
+                  key={a.id}
+                  selected={address?.id === a.id}
+                  onSelect={() => setAddressId(a.id)}
+                  icon={a.label === 'घर' ? '🏠' : '🏢'}
+                  title={a.label}
+                  sub={addressLine(a)}
+                />
+              ))}
+              <Button variant="ghost" size="sm" onClick={() => setAddingAddress(true)}>
+                + {t('cus.addAddress')}
+              </Button>
+            </div>
+          )}
         </div>
 
         {unserviceable.length > 0 && (
@@ -231,6 +294,7 @@ export function Checkout() {
         {mode === 'UPI' && (
           <div className="stack-sm">
             {groups.map((g) => {
+              const ready = !!g.seller?.upiQrReady && !!g.seller?.upiId
               const link = buildUpiLink({
                 upiId: g.seller?.upiId ?? '',
                 name: g.seller?.shopName,
@@ -249,18 +313,19 @@ export function Checkout() {
                     </div>
                     <strong><Rupees value={g.total} /></strong>
                   </div>
-                  <div
-                    style={{
-                      aspectRatio: 1, maxWidth: 150, margin: '0 auto var(--s3)',
-                      background: 'var(--surface-2)', border: '1px solid var(--line)',
-                      borderRadius: 'var(--r)', display: 'grid', placeItems: 'center',
-                      fontSize: '2.5rem',
-                    }}
-                  >
-                    🔳
-                  </div>
-                  <a className="btn" href={link}>{t('cus.payNow')} · ₹{g.total}</a>
-                  <div className="tiny dim center" style={{ marginTop: 6 }}>{g.seller?.upiId}</div>
+                  {ready ? (
+                    <>
+                      <QrCode value={link} size={150} label={t('cus.payTo')} />
+                      <a className="btn" href={link} style={{ marginTop: 'var(--s3)' }}>
+                        {t('cus.payNow')} · ₹{g.total}
+                      </a>
+                      <div className="tiny dim center" style={{ marginTop: 6 }}>{g.seller?.upiId}</div>
+                    </>
+                  ) : (
+                    /* She has not set her payment QR up yet, so there is
+                       nothing real to show. Say so instead of drawing a code. */
+                    <Notice tone="warn">{t('qrpay.notSetUp')}</Notice>
+                  )}
                 </Card>
               )
             })}
@@ -326,17 +391,8 @@ export function OrderPlaced() {
           <p className="dim num">{order.id}</p>
         </div>
 
-        {/* Shown large and early. Without this the seller can mark an
-            undelivered order as delivered and nothing would catch it. */}
-        <Card style={{ textAlign: 'center', borderColor: 'var(--accent)', borderWidth: 2 }}>
-          <div className="small dim">{t('cus.yourOtp')}</div>
-          <div
-            className="num"
-            style={{ fontSize: '3rem', fontWeight: 700, letterSpacing: '0.12em', lineHeight: 1.2 }}
-          >
-            {order.deliveryOtp}
-          </div>
-          <p className="small muted" style={{ marginTop: 'var(--s2)' }}>{t('cus.otpInstruction')}</p>
+        <Card style={{ textAlign: 'center' }}>
+          <p className="body muted" style={{ margin: 0 }}>{t('cus.orderPlacedNote')}</p>
         </Card>
 
         <Button onClick={() => nav(`/shop/orders/${order.id}`, { replace: true })}>
@@ -401,14 +457,6 @@ export function TrackOrder() {
     <>
       <AppBar title={`${t('ord.order')} ${order.id}`} onBack={() => nav(-1)} />
       <div className="screen stack">
-        <Card style={{ textAlign: 'center' }}>
-          <div className="small dim">{t('cus.yourOtp')}</div>
-          <div className="num" style={{ fontSize: '2.25rem', fontWeight: 700, letterSpacing: '0.1em' }}>
-            {order.deliveryOtp}
-          </div>
-          <p className="small muted">{t('cus.otpInstruction')}</p>
-        </Card>
-
         <Card><Timeline order={order} /></Card>
 
         <Card>
@@ -442,7 +490,26 @@ export function CustomerProfile() {
   const nav = useNavigate()
   const { lang, setLang, langs } = useI18n()
   const { session, signOut } = useAuth()
-  const [data] = useAsync(() => api.addresses(), [])
+  const [data, loading, setData] = useAsync(() => api.customerMe(), [])
+  const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const customer = data?.customer
+  const addresses = customer?.addresses ?? []
+
+  /** Every mutation re-reads her record, so the list can never drift. */
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true)
+    try {
+      await action()
+      setData(await api.customerMe())
+      setAdding(false)
+      setEditing(null)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <>
@@ -452,7 +519,9 @@ export function CustomerProfile() {
           <div className="row">
             <div className="tile__img" style={{ width: 56, height: 56, fontSize: '1.75rem' }}>👤</div>
             <div>
-              <div style={{ fontWeight: 700 }}>{session?.name ?? 'ग्राहक'}</div>
+              <div style={{ fontWeight: 700 }}>
+                {customer?.name || session?.name || 'ग्राहक'}
+              </div>
               <div className="small dim num">+91 {session?.phone}</div>
             </div>
           </div>
@@ -465,15 +534,76 @@ export function CustomerProfile() {
         </button>
 
         <Card>
-          <SectionTitle>{t('cus.chooseAddress')}</SectionTitle>
-          <div className="stack-sm small">
-            {(data?.addresses ?? []).map((a) => (
-              <div key={a.id}>
-                <strong>{a.label}</strong>
-                <div className="dim">{a.line}, {a.city} - {a.pincode}</div>
-              </div>
-            ))}
+          <SectionTitle>{t('cus.savedAddresses')}</SectionTitle>
+
+          {loading && <Loading />}
+
+          {!loading && addresses.length === 0 && !adding && (
+            <p className="small dim">{t('cus.noAddresses')}</p>
+          )}
+
+          <div className="stack-sm">
+            {addresses.map((a) =>
+              editing === a.id ? (
+                <AddressForm
+                  key={a.id}
+                  initial={a}
+                  busy={busy}
+                  submitLabel={t('common.save')}
+                  onSubmit={(input) => void run(() => api.updateAddress(a.id, input))}
+                  onCancel={() => setEditing(null)}
+                />
+              ) : (
+                <div key={a.id} className="stack-sm">
+                  <div className="row">
+                    <strong>{a.label}</strong>
+                    {a.isDefault && <Pill tone="ok">{t('cus.defaultAddress')}</Pill>}
+                  </div>
+                  <div className="small dim">{addressLine(a)}</div>
+                  {a.landmark && <div className="small dim">{a.landmark}</div>}
+                  <div className="row">
+                    <Button variant="quiet" size="sm" onClick={() => setEditing(a.id)}>
+                      {t('common.edit')}
+                    </Button>
+                    {!a.isDefault && (
+                      <Button
+                        variant="quiet"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void run(() => api.updateAddress(a.id, { isDefault: true }))}
+                      >
+                        {t('cus.setDefault')}
+                      </Button>
+                    )}
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => {
+                        if (confirm(t('cus.deleteAddressConfirm'))) {
+                          void run(() => api.deleteAddress(a.id))
+                        }
+                      }}
+                    >
+                      {t('cus.deleteAddress')}
+                    </Button>
+                  </div>
+                </div>
+              ),
+            )}
           </div>
+
+          {adding ? (
+            <AddressForm
+              busy={busy}
+              onSubmit={(input) => void run(() => api.addAddress(input))}
+              onCancel={() => setAdding(false)}
+            />
+          ) : (
+            <Button variant="ghost" size="sm" onClick={() => setAdding(true)}>
+              + {t('cus.addAddress')}
+            </Button>
+          )}
         </Card>
 
         <Card>

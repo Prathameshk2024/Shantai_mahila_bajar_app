@@ -4,6 +4,7 @@ import type { Role } from '@shared/types.js'
 import { I18nProvider } from './i18n/I18nProvider.js'
 import { AuthProvider, useAuth } from './store/AuthContext.js'
 import { CartProvider } from './store/CartContext.js'
+import { PincodeProvider } from './store/PincodeContext.js'
 import { CustomerLayout, SellerLayout } from './components/layouts.js'
 
 import Landing from './screens/landing/Landing.js'
@@ -16,6 +17,8 @@ import UploadProduct from './screens/seller/UploadProduct.js'
 import { SellerOrderDetail, SellerOrders } from './screens/seller/Orders.js'
 import { PaymentWaiting, Subscription } from './screens/seller/Subscription.js'
 import { SellerGrowth, SellerHelp, SellerProfile, SellerQr } from './screens/seller/Misc.js'
+import { MyBuyers } from './screens/seller/MyBuyers.js'
+import PaymentQr from './screens/seller/PaymentQr.js'
 
 import {
   Categories, CategoryProducts, Explore, ProductDetail, SellerStore,
@@ -51,6 +54,7 @@ export default function App() {
     <I18nProvider>
       <AuthProvider>
         <CartProvider>
+          <PincodeProvider>
           <Router>
             <Routes>
               {/* ---- public ---------------------------------------- */}
@@ -79,7 +83,9 @@ export default function App() {
                 <Route path="profile" element={<SellerProfile />} />
                 <Route path="help" element={<SellerHelp />} />
                 <Route path="growth" element={<SellerGrowth />} />
+                <Route path="buyers" element={<MyBuyers />} />
                 <Route path="qr" element={<SellerQr />} />
+                <Route path="payment" element={<PaymentQr />} />
               </Route>
 
               {/* ---- customer: standalone --------------------------- */}
@@ -105,6 +111,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Router>
+          </PincodeProvider>
         </CartProvider>
       </AuthProvider>
     </I18nProvider>

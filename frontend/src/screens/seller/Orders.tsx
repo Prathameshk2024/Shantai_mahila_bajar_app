@@ -9,7 +9,7 @@ import { useT } from '../../i18n/I18nProvider.js'
 import { api, ApiError } from '../../lib/api.js'
 import {
   AppBar, AudioHelpButton, Button, Card, Choice, ConfirmSheet, EmptyState,
-  Loading, Notice, OtpInput, Pill, Rupees, useAsync,
+  Loading, Notice, Pill, Rupees, useAsync,
 } from '../../components/ui.js'
 
 const TABS: { id: string; labelKey: string; statuses?: OrderStatus[] }[] = [
@@ -90,9 +90,7 @@ export function SellerOrderDetail() {
   const [data, loading, setData] = useAsync(() => api.order(orderId!), [orderId])
 
   const [confirm, setConfirm] = useState<SellerAction | null>(null)
-  const [otpOpen, setOtpOpen] = useState(false)
-  const [otp, setOtp] = useState('')
-  const [otpErr, setOtpErr] = useState('')
+  const [actionErr, setActionErr] = useState('')
   const [rejectOpen, setRejectOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -108,18 +106,15 @@ export function SellerOrderDetail() {
   const awaitingUpi = order.paymentMode === 'UPI' && order.paymentStatus === 'UPI_SUBMITTED'
   const style = STATUS_STYLE[order.status]
 
-  async function run(action: SellerAction, extra?: { otp?: string; reason?: string }) {
+  async function run(action: SellerAction, extra?: { reason?: string }) {
     setBusy(true)
+    setActionErr('')
     try {
       const res = await api.advanceOrder(order.id, action.to, extra)
       setData({ ...data!, order: res.order })
-      setOtpOpen(false)
       setRejectOpen(false)
-      setOtp('')
-      setOtpErr('')
     } catch (e) {
-      // The OTP check lives on the server, so a wrong code comes back as an error.
-      if (e instanceof ApiError) setOtpErr(e.messageMr ?? e.message)
+      if (e instanceof ApiError) setActionErr(e.messageMr ?? e.message)
     } finally {
       setBusy(false)
     }
@@ -216,6 +211,8 @@ export function SellerOrderDetail() {
           <Timeline order={order} />
         </Card>
 
+        {actionErr && <Notice tone="danger">{actionErr}</Notice>}
+
         {actions.length > 0 && (
           <div className="actionbar">
             {actions.map((a) => (
@@ -224,8 +221,7 @@ export function SellerOrderDetail() {
                 variant={a.tone === 'ghost' ? 'ghost' : 'primary'}
                 disabled={busy}
                 onClick={() => {
-                  if (a.needsOtp) setOtpOpen(true)
-                  else if (a.needsReason) setRejectOpen(true)
+                  if (a.needsReason) setRejectOpen(true)
                   else if (a.confirmKey) setConfirm(a)
                   else void run(a)
                 }}
@@ -249,31 +245,6 @@ export function SellerOrderDetail() {
           void run(a)
         }}
       />
-
-      {/* The delivery OTP. Verified on the server - this dialog only collects it. */}
-      {otpOpen && (
-        <div className="sheet-backdrop" onClick={() => setOtpOpen(false)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="stack">
-              <div className="stack-sm">
-                <h2 className="h2">{t('ord.otpTitle')}</h2>
-                <p className="body muted">{t('ord.otpHint')}</p>
-              </div>
-              <OtpInput value={otp} onChange={(v) => { setOtp(v); setOtpErr('') }} />
-              {otpErr && <div className="field__err center" role="alert">⚠ {otpErr}</div>}
-              <div className="btn-row">
-                <Button variant="quiet" onClick={() => setOtpOpen(false)}>{t('common.cancel')}</Button>
-                <Button
-                  onClick={() => void run({ to: 'DELIVERED', labelKey: 'ord.markDelivered', tone: 'primary', needsOtp: true }, { otp })}
-                  disabled={otp.length < 4 || busy}
-                >
-                  {t('ord.markDelivered')}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {rejectOpen && (
         <div className="sheet-backdrop" onClick={() => setRejectOpen(false)}>

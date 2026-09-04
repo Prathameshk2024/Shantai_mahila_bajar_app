@@ -148,6 +148,7 @@ export default function MyBusiness() {
           <QuickLink icon="🧾" label={t('biz.myOrders')} to="/seller/orders" />
           <QuickLink icon="📈" label={t('biz.myGrowth')} to="/seller/growth" />
           <QuickLink icon="🔳" label={t('biz.myQr')} to="/seller/qr" />
+          <QuickLink icon="👥" label={t('buy.tile')} to="/seller/buyers" />
         </div>
 
         {seller.status !== 'ACTIVE' && (

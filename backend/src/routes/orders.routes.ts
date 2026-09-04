@@ -2,6 +2,7 @@ import { Router } from 'express'
 import type { Order, OrderStatus, PaymentMode, SellerGroup } from '@shared/types.js'
 import { actionFor, canTransition, initialPaymentStatus } from '@shared/orderFlow.js'
 import { getDb, save } from '../db/store.js'
+import { recordOrderCustomer } from '../db/customers.js'
 import { requireRole } from '../middleware/auth.js'
 
 export const ordersRouter: Router = Router()
@@ -153,9 +154,6 @@ ordersRouter.post('/', requireRole('customer'), (req, res) => {
       paymentStatus: initialPaymentStatus(b.paymentMode),
       paymentUtr: b.paymentMode === 'UPI' ? b.paymentUtr : undefined,
       status: 'PLACED',
-      // The delivery OTP. Without it a seller can mark an undelivered order as
-      // delivered, and since there is no courier, nothing else would catch it.
-      deliveryOtp: String(Math.floor(1000 + Math.random() * 9000)),
       placedAt: now,
       events: [{ to: 'PLACED', at: now, by: 'customer' }],
       sourceShareCode: b.sourceShareCode,
@@ -165,6 +163,10 @@ ordersRouter.post('/', requireRole('customer'), (req, res) => {
     created.push(order)
     if (order.sourceShareCode === seller.shopSlug) seller.qrOrders += 1
   }
+
+  // Remember who she is and where she asked for it. A cart split across three
+  // sellers is three orders but one customer, so this runs once on the first.
+  if (created[0]) recordOrderCustomer(db, created[0])
 
   save()
   res.status(201).json({ orders: created, groupId })
@@ -194,19 +196,6 @@ ordersRouter.post('/:id/advance', requireRole('seller'), (req, res) => {
   }
 
   const action = actionFor(order.status, to)
-
-  // The delivery OTP check. This is the single guard that keeps a
-  // self-reported delivery honest, so it lives on the server.
-  if (action?.needsOtp) {
-    const otp = String(req.body?.otp ?? '')
-    if (otp !== order.deliveryOtp) {
-      res.status(400).json({
-        error: 'Wrong OTP',
-        messageMr: 'OTP चुकीचा आहे. ग्राहकाला पुन्हा विचारा.',
-      })
-      return
-    }
-  }
 
   if (action?.needsReason && !req.body?.reason) {
     res.status(400).json({ error: 'Reason required', messageMr: 'कारण निवडा' })

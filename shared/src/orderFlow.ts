@@ -11,6 +11,11 @@ import type { Order, OrderStatus, PaymentMode, PaymentStatus } from './types.js'
  * because a cash order and a UPI order have to walk the same six screens.
  * Inserting a payment state into the middle is the change that would break it.
  *
+ * There is no delivery OTP. The seller marks DELIVERED herself and that is
+ * accepted at face value; the trail in `events` is what admin reviews if a
+ * customer disputes it. (The login OTP is a different thing entirely and is
+ * still required - see backend/src/services/otp.service.ts.)
+ *
  * The backend validates transitions against this table; the frontend draws its
  * buttons from it. Neither hard-codes a status string.
  */
@@ -28,8 +33,6 @@ export interface SellerAction {
   to: OrderStatus
   labelKey: string
   tone: 'primary' | 'ghost'
-  /** Requires the customer's delivery OTP. Only DELIVERED sets this. */
-  needsOtp?: boolean
   needsReason?: boolean
   confirmKey?: string
   confirmSubKey?: string
@@ -51,7 +54,7 @@ export const SELLER_ACTIONS: Record<OrderStatus, SellerAction[]> = {
     },
   ],
   OUT_FOR_DELIVERY: [
-    { to: 'DELIVERED', labelKey: 'ord.markDelivered', tone: 'primary', needsOtp: true },
+    { to: 'DELIVERED', labelKey: 'ord.markDelivered', tone: 'primary' },
   ],
   DELIVERED: [],
   COMPLETED: [],

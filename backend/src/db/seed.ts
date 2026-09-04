@@ -1,15 +1,39 @@
 import type {
-  Address, AdminPaymentAccount, Category, Order, Product, Seller, SubscriptionPayment,
+  AdminPaymentAccount, Category, Customer, Order, Product, Seller, SubscriptionPayment,
 } from '@shared/types.js'
 import { computeReadiness, readinessBand } from '@shared/readiness.js'
 import type { DigitalProfile } from '@shared/types.js'
+import { deriveCustomersFromOrders } from './customers.js'
 
 export interface Db {
   sellers: Seller[]
   products: Product[]
   orders: Order[]
   payments: SubscriptionPayment[]
-  addresses: Address[]
+  customers: Customer[]
+}
+
+/**
+ * Fill in collections a stored database is missing.
+ *
+ * db.json on someone's disk may predate a collection - `customers` was added
+ * after the file format was already in use - and deploying new code does not
+ * rewrite it. Without this, the first request would hit
+ * `db.customers.find(...)` on undefined and throw.
+ */
+/** A database with nothing in it. What a live install starts from. */
+export function emptyDb(): Db {
+  return { sellers: [], products: [], orders: [], payments: [], customers: [] }
+}
+
+export function withDefaults(raw: Partial<Db>): Db {
+  return {
+    sellers: raw.sellers ?? [],
+    products: raw.products ?? [],
+    orders: raw.orders ?? [],
+    payments: raw.payments ?? [],
+    customers: raw.customers ?? [],
+  }
 }
 
 export const CATEGORIES: Category[] = [
@@ -174,7 +198,7 @@ export function seed(): Db {
       ],
       itemsTotal: 580, deliveryFee: 0, total: 580,
       paymentMode: 'UPI', paymentStatus: 'UPI_SUBMITTED', paymentUtr: '431209887654',
-      status: 'PLACED', deliveryOtp: '4417', placedAt: hoursAgo(1),
+      status: 'PLACED', placedAt: hoursAgo(1),
       events: [{ to: 'PLACED', at: hoursAgo(1), by: 'customer' }],
     },
     {
@@ -184,7 +208,7 @@ export function seed(): Db {
       items: [{ productId: 'p3', name: 'तांदळाचे पापड', emoji: '🥟', qty: 3, price: 90 }],
       itemsTotal: 270, deliveryFee: 20, total: 290,
       paymentMode: 'COD', paymentStatus: 'COD_PENDING',
-      status: 'PACKED', deliveryOtp: '2093', placedAt: hoursAgo(6),
+      status: 'PACKED', placedAt: hoursAgo(6),
       events: [
         { to: 'PLACED', at: hoursAgo(6), by: 'customer' },
         { to: 'ACCEPTED', at: hoursAgo(5), by: 'seller' },
@@ -198,7 +222,7 @@ export function seed(): Db {
       items: [{ productId: 'p1', name: 'आंब्याचे लोणचे', emoji: '🫙', qty: 2, price: 220 }],
       itemsTotal: 440, deliveryFee: 20, total: 460,
       paymentMode: 'COD', paymentStatus: 'COD_PENDING',
-      status: 'OUT_FOR_DELIVERY', deliveryOtp: '7752', placedAt: hoursAgo(28),
+      status: 'OUT_FOR_DELIVERY', placedAt: hoursAgo(28),
       events: [
         { to: 'PLACED', at: hoursAgo(28), by: 'customer' },
         { to: 'ACCEPTED', at: hoursAgo(27), by: 'seller' },
@@ -213,7 +237,7 @@ export function seed(): Db {
       items: [{ productId: 'p2', name: 'कांदा लसूण मसाला', emoji: '🌶️', qty: 1, price: 180 }],
       itemsTotal: 180, deliveryFee: 20, total: 200,
       paymentMode: 'UPI', paymentStatus: 'UPI_CONFIRMED', paymentUtr: '430918776541',
-      status: 'COMPLETED', deliveryOtp: '1188', placedAt: hoursAgo(9),
+      status: 'COMPLETED', placedAt: hoursAgo(9),
       events: [
         { to: 'PLACED', at: hoursAgo(9), by: 'customer' },
         { to: 'ACCEPTED', at: hoursAgo(8), by: 'seller' },
@@ -231,7 +255,7 @@ export function seed(): Db {
       items: [{ productId: 'p6', name: 'सुती दुपट्टा', emoji: '🧣', qty: 1, price: 450 }],
       itemsTotal: 450, deliveryFee: 40, total: 490,
       paymentMode: 'COD', paymentStatus: 'COD_PENDING',
-      status: 'ACCEPTED', deliveryOtp: '5521', placedAt: hoursAgo(9),
+      status: 'ACCEPTED', placedAt: hoursAgo(9),
       events: [
         { to: 'PLACED', at: hoursAgo(9), by: 'customer' },
         { to: 'ACCEPTED', at: hoursAgo(8), by: 'seller' },
@@ -254,14 +278,12 @@ export function seed(): Db {
       submittedAt: daysAgo(30), status: 'APPROVED', duplicateUtr: false, verifiedAt: daysAgo(30) },
   ]
 
-  const addresses: Address[] = [
-    { id: 'a1', label: 'घर', line: 'फ्लॅट 302, शिवसागर अपार्टमेंट, विमाननगर',
-      landmark: 'सिम्बायोसिस कॉलेजजवळ', city: 'पुणे', pincode: '413601', isDefault: true },
-    { id: 'a2', label: 'ऑफिस', line: 'दुसरा मजला, टेक पार्क, खराडी',
-      landmark: 'EON IT पार्क', city: 'पुणे', pincode: '413603', isDefault: false },
-  ]
+  // Customers are not written by hand. They are derived from the orders above
+  // by exactly the same code the backfill script runs against live data, so a
+  // fresh install and a migrated database end up with identical records.
+  const customers = deriveCustomersFromOrders(orders)
 
-  return { sellers, products, orders, payments, addresses }
+  return { sellers, products, orders, payments, customers }
 }
 
 export const SELLER_WEEK_SEED: Record<string, unknown> = {

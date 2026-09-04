@@ -4,7 +4,7 @@ import {
 } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useT } from '../i18n/I18nProvider.js'
-import { useVoiceInput } from '../lib/useVoiceInput.js'
+import VoiceButton from './VoiceButton.js'
 
 /* ================================================================== */
 /* Buttons                                                             */
@@ -35,13 +35,15 @@ export function Button({
 /* ================================================================== */
 
 export function AppBar({
-  title, sub, onBack, right, backTo,
+  title, sub, onBack, right, backTo, voice = true,
 }: {
   title: ReactNode
   sub?: ReactNode
   onBack?: () => void
   right?: ReactNode
   backTo?: string
+  /** The shared mic. On by default; the landing page never renders an AppBar. */
+  voice?: boolean
 }) {
   const nav = useNavigate()
   return (
@@ -60,6 +62,7 @@ export function AppBar({
         {sub && <span className="appbar__sub">{sub}</span>}
       </h1>
       {right}
+      {voice && <VoiceButton />}
     </header>
   )
 }
@@ -215,14 +218,15 @@ export function TextInput({
 }
 
 /**
- * A text input with a microphone beside it.
+ * A text field that the shared header microphone can dictate into.
  *
- * This is what lets a seller enter a product name she cannot type. The keyboard
- * is never removed - voice is an addition, and on a phone with no speech
- * support the mic simply is not rendered.
+ * It used to render its own mic. It no longer does: there is ONE voice control,
+ * in the header, and it types into whichever field was last touched. That keeps
+ * a form from turning into a row of identical microphones, which is confusing
+ * when almost every field accepts speech.
  */
 export function VoiceInput({
-  value, onChange, error, multiline, lang = 'mr-IN', ...rest
+  value, onChange, error, multiline, lang: _lang, ...rest
 }: {
   value: string
   onChange: (v: string) => void
@@ -230,59 +234,21 @@ export function VoiceInput({
   multiline?: boolean
   lang?: string
 } & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
-  const t = useT()
-
-  const { supported, listening, error: voiceError, interim, toggle } = useVoiceInput(
-    (said) => onChange(value ? `${value} ${said}` : said),
-    { lang },
-  )
-
-  const errorText =
-    voiceError === 'denied'
-      ? t('common.voiceUnsupported')
-      : voiceError === 'no-speech'
-        ? t('common.speak')
-        : null
-
-  return (
-    <div className="stack-sm">
-      <div className="input-voice">
-        {multiline ? (
-          <textarea
-            className={`textarea ${error ? 'textarea--err' : ''}`}
-            value={listening && interim ? `${value} ${interim}`.trim() : value}
-            onChange={(e) => onChange(e.target.value)}
-            {...(rest as React.TextareaHTMLAttributes<HTMLTextAreaElement>)}
-          />
-        ) : (
-          <input
-            className={`input ${error ? 'input--err' : ''}`}
-            value={listening && interim ? `${value} ${interim}`.trim() : value}
-            onChange={(e) => onChange(e.target.value)}
-            {...rest}
-          />
-        )}
-
-        {supported && (
-          <button
-            type="button"
-            className={`mic ${listening ? 'mic--on' : ''}`}
-            onClick={toggle}
-            aria-label={listening ? t('common.listening') : t('common.voiceHint')}
-            aria-pressed={listening}
-          >
-            {listening ? '⏹' : '🎤'}
-          </button>
-        )}
-      </div>
-
-      {supported && (
-        <div className="tiny dim">
-          {listening ? `🔴 ${t('common.listening')}` : `🎤 ${t('common.voiceHint')}`}
-        </div>
-      )}
-      {errorText && <div className="field__err">⚠ {errorText}</div>}
-    </div>
+  void _lang
+  return multiline ? (
+    <textarea
+      className={`textarea ${error ? 'textarea--err' : ''}`}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      {...(rest as React.TextareaHTMLAttributes<HTMLTextAreaElement>)}
+    />
+  ) : (
+    <input
+      className={`input ${error ? 'input--err' : ''}`}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      {...rest}
+    />
   )
 }
 

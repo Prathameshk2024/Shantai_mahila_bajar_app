@@ -41,6 +41,15 @@ export function PhoneScreen({ mode }: { mode: 'join' | 'login' }) {
     setBusy(true)
     try {
       const res = await api.sendOtp(phone)
+
+      // The server rate-limits resends to one every 30s and answers 200 with
+      // { sent: false }. Navigating anyway would drop her on an OTP screen
+      // for a message that was never sent.
+      if (!res.sent) {
+        setErr(t('onb.otpCooldown', { n: Math.ceil((res.cooldownMs ?? 30_000) / 1000) }))
+        return
+      }
+
       // Demo mode returns the code so the skeleton works without SMS.
       const demo = res.demoCode ? `&demo=${res.demoCode}` : ''
       nav(`/otp/${role}?phone=${phone}&mode=${mode}${demo}`)
@@ -57,6 +66,7 @@ export function PhoneScreen({ mode }: { mode: 'join' | 'login' }) {
         title={t('onb.phoneTitle')}
         sub={role === 'seller' ? t('lp.sellerDoor') : t('lp.customerDoor')}
         backTo="/"
+        voice={false}
         right={<AudioHelpButton text={t('onb.phoneHint')} />}
       />
       <div className="screen screen--nonav stack">
@@ -144,6 +154,7 @@ export function OtpScreen() {
         title={t('onb.otpTitle')}
         sub={`${t('onb.otpSentTo')} +91 ${phone}`}
         onBack={() => nav(-1)}
+        voice={false}
       />
       <div className="screen screen--nonav stack">
         <OtpInput value={code} onChange={(v) => { setCode(v); setErr('') }} />

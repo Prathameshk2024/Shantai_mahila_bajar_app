@@ -4,6 +4,7 @@ import type { Product } from '@shared/types.js'
 import { PRODUCT_STATUS_STYLE } from '@shared/seller.js'
 import { useT } from '../../i18n/I18nProvider.js'
 import { api } from '../../lib/api.js'
+import ProductImage from '../../components/ProductImage.js'
 import {
   AppBar, Button, Card, ConfirmSheet, EmptyState, Loading, Notice,
   Pill, Rupees, SlotMeter, useAsync,
@@ -67,7 +68,7 @@ export default function MyProducts() {
               return (
                 <Card key={p.id}>
                   <div className="row" style={{ alignItems: 'flex-start' }}>
-                    <div className="tile__img" aria-hidden="true">{p.emoji}</div>
+                    <ProductImage src={p.imageUrl} emoji={p.emoji} size={62} className="tile__img" />
                     <div className="tile__body">
                       <div className="tile__title">{p.name}</div>
                       <div className="row" style={{ gap: 6 }}>

@@ -4,6 +4,7 @@ import {
 } from 'react'
 import type { Session } from '@shared/types.js'
 import { setToken } from '../lib/api.js'
+import { configureImageCache } from '../lib/imageCache.js'
 
 /**
  * Session state. One phone number can be both a seller and a customer, so the
@@ -38,6 +39,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session) {
         localStorage.setItem(KEY, JSON.stringify(session))
         setToken(session.token)
+        // A seller browses her own handful of products; a customer scrolls a
+        // whole catalog. Different working sets, different cache sizes.
+        if (session.role === 'seller' || session.role === 'customer') {
+          configureImageCache(session.role)
+        }
       } else {
         localStorage.removeItem(KEY)
         setToken(null)

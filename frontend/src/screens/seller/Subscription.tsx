@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useT } from '../../i18n/I18nProvider.js'
 import { api, ApiError } from '../../lib/api.js'
+import QrCode from '../../components/QrCode.js'
 import {
   AppBar, AudioHelpButton, Button, Card, Field, Loading, Notice,
   Rupees, TextInput, useAsync,
@@ -48,7 +49,7 @@ export function Subscription() {
 
   const upiLink =
     `upi://pay?pa=${account.upiId}&pn=${encodeURIComponent(account.label)}` +
-    `&am=${plan.price}.00&cu=INR&tn=Shanta Mahila Bazar%20registration`
+    `&am=${plan.price}.00&cu=INR&tn=${encodeURIComponent('Shanta Mahila Bazar')}`
 
   return (
     <>
@@ -66,17 +67,7 @@ export function Subscription() {
         <Card>
           <div className="section-title">{t('pay.payTo')}</div>
           <div className="stack-sm">
-            <div
-              style={{
-                aspectRatio: 1, maxWidth: 200, margin: '0 auto',
-                background: 'var(--surface-2)', borderRadius: 'var(--r)',
-                display: 'grid', placeItems: 'center', fontSize: '3rem',
-                border: '1px solid var(--line)',
-              }}
-              aria-label={t('pay.scanQr')}
-            >
-              🔳
-            </div>
+            <QrCode value={upiLink} size={200} label={t('pay.scanQr')} />
             <div className="center">
               <div className="small dim">{t('pay.upiId')}</div>
               <strong className="num">{account.upiId}</strong>
@@ -124,7 +115,30 @@ export function Subscription() {
 export function PaymentWaiting() {
   const t = useT()
   const nav = useNavigate()
-  const [data, loading] = useAsync(() => api.subscription(), [])
+  const [data, loading, setData] = useAsync(() => api.subscription(), [])
+
+  /**
+   * Poll while she is waiting.
+   *
+   * She is sitting on this screen precisely because she is waiting on someone
+   * else, so the screen has to change by itself. Making her pull-to-refresh to
+   * discover she was approved is the one interaction this audience will not
+   * think to try. Ten seconds is frequent enough to feel immediate and light
+   * enough for rural 4G, and it stops the moment she is approved or rejected.
+   */
+  const status = data?.status
+  const settled = status === 'ACTIVE' || status === 'PAYMENT_REJECTED'
+
+  useEffect(() => {
+    if (loading || settled) return
+    const id = setInterval(() => {
+      api.subscription().then(setData).catch(() => {
+        /* offline for a moment - the next tick will pick it up */
+      })
+    }, 10_000)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, settled])
 
   if (loading || !data) {
     return <div className="app-shell"><div className="screen"><Loading /></div></div>
