@@ -15,21 +15,11 @@ import MyProducts from './screens/seller/MyProducts.js'
 import UploadProduct from './screens/seller/UploadProduct.js'
 import { SellerOrderDetail, SellerOrders } from './screens/seller/Orders.js'
 import { PaymentWaiting, Subscription } from './screens/seller/Subscription.js'
-import { SellerGrowth, SellerHelp, SellerProfile, SellerQr } from './screens/seller/Misc.js'
+import { SellerGrowth, SellerHelp, SellerProfile } from './screens/seller/Misc.js'
 
-import {
-  Categories, CategoryProducts, Explore, ProductDetail, SellerStore,
-} from './screens/customer/Browse.js'
-import {
-  Cart, Checkout, CustomerOrders, CustomerProfile, OrderPlaced, TrackOrder,
-} from './screens/customer/CartCheckout.js'
-
-/**
- * NOTE: there is no /admin route here, and that is deliberate.
- * The client wants the admin console as a separate site, so this app ships the
- * seller and customer experiences only. Everything an admin console needs is
- * exposed as JSON by the backend at /api/admin/*.
- */
+import { Categories, CategoryProducts, Explore, ProductDetail, SellerStore } from './screens/customer/Browse.js'
+import { Cart, Checkout, CustomerOrders, CustomerProfile, OrderPlaced, TrackOrder } from './screens/customer/CartCheckout.js'
+import CustomerFeedback from './screens/customer/Feedback.js'
 
 function Require({ role, children }: { role: Role; children: ReactNode }) {
   const { session } = useAuth()
@@ -38,7 +28,6 @@ function Require({ role, children }: { role: Role; children: ReactNode }) {
   return <>{children}</>
 }
 
-/** Signed-in users skip the landing page. */
 function Root() {
   const { session } = useAuth()
   if (session?.role === 'seller') return <Navigate to="/seller" replace />
@@ -53,22 +42,13 @@ export default function App() {
         <CartProvider>
           <Router>
             <Routes>
-              {/* ---- public ---------------------------------------- */}
               <Route path="/" element={<Root />} />
-
-              {/* Two doors from the landing page, one per role. */}
               <Route path="/join/:role" element={<PhoneScreen mode="join" />} />
               <Route path="/login/:role" element={<PhoneScreen mode="login" />} />
               <Route path="/otp/:role" element={<OtpScreen />} />
               <Route path="/register/seller" element={<SellerRegister />} />
 
-              {/* ---- seller: standalone screens (no bottom nav) ----- */}
-              <Route
-                path="/seller/waiting"
-                element={<Require role="seller"><PaymentWaiting /></Require>}
-              />
-
-              {/* ---- seller app ------------------------------------ */}
+              <Route path="/seller/waiting" element={<Require role="seller"><PaymentWaiting /></Require>} />
               <Route path="/seller" element={<Require role="seller"><SellerLayout /></Require>}>
                 <Route index element={<MyBusiness />} />
                 <Route path="orders" element={<SellerOrders />} />
@@ -79,16 +59,9 @@ export default function App() {
                 <Route path="profile" element={<SellerProfile />} />
                 <Route path="help" element={<SellerHelp />} />
                 <Route path="growth" element={<SellerGrowth />} />
-                <Route path="qr" element={<SellerQr />} />
               </Route>
 
-              {/* ---- customer: standalone --------------------------- */}
-              <Route
-                path="/shop/placed/:orderId"
-                element={<Require role="customer"><OrderPlaced /></Require>}
-              />
-
-              {/* ---- customer app ----------------------------------- */}
+              <Route path="/shop/placed/:orderId" element={<Require role="customer"><OrderPlaced /></Require>} />
               <Route path="/shop" element={<Require role="customer"><CustomerLayout /></Require>}>
                 <Route index element={<Explore />} />
                 <Route path="categories" element={<Categories />} />
@@ -100,6 +73,7 @@ export default function App() {
                 <Route path="orders" element={<CustomerOrders />} />
                 <Route path="orders/:orderId" element={<TrackOrder />} />
                 <Route path="profile" element={<CustomerProfile />} />
+                <Route path="feedback" element={<CustomerFeedback />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
