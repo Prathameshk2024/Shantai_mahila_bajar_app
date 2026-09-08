@@ -23,7 +23,13 @@ let db: Db = load()
 function load(): Db {
   try {
     if (fs.existsSync(DB_FILE)) {
-      return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) as Db
+      const loaded = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) as Db
+      if (!Array.isArray(loaded.sellers)) loaded.sellers = []
+      if (!Array.isArray(loaded.products)) loaded.products = []
+      if (!Array.isArray(loaded.orders)) loaded.orders = []
+      if (!Array.isArray(loaded.payments)) loaded.payments = []
+      if (!Array.isArray(loaded.addresses)) loaded.addresses = []
+      return loaded
     }
   } catch (err) {
     console.warn('[db] could not read db.json, reseeding:', (err as Error).message)
@@ -42,7 +48,33 @@ function persist(next: Db): void {
   }
 }
 
+/**
+ * Rejected products are intentionally retained for 48 hours so the seller can
+ * see the rejection and its reason. After that window they are archived,
+ * which is the application's existing soft-delete and slot-release behavior.
+ */
+export function purgeExpiredRejectedProducts(): void {
+  const now = Date.now()
+  let changed = false
+
+  for (const product of db.products) {
+    if (
+      product.status === 'REJECTED' &&
+      product.autoDeleteAt &&
+      new Date(product.autoDeleteAt).getTime() <= now
+    ) {
+      product.status = 'ARCHIVED'
+      changed = true
+    }
+  }
+
+  if (changed) persist(db)
+}
+
 export function getDb(): Db {
+  // Keep expiry correct even when the process has just restarted and before
+  // the background maintenance interval gets its first tick.
+  purgeExpiredRejectedProducts()
   return db
 }
 
