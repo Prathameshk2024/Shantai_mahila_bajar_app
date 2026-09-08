@@ -2,14 +2,10 @@
  * Types shared by the frontend and the backend.
  *
  * This folder is the single source of truth for anything that crosses the
- * wire. Both tsconfigs alias it to `@shared/*`, so a change there is a compile
+ * wire. Both tsconfigs alias it to `@shared/*`, so a change here is a compile
  * error on whichever side has not caught up - which is the whole reason this
  * project is in TypeScript.
  */
-
-/* ------------------------------------------------------------------ */
-/* Roles & auth                                                        */
-/* ------------------------------------------------------------------ */
 
 export type Role = 'seller' | 'customer' | 'admin'
 
@@ -19,15 +15,9 @@ export interface Session {
   userId: string
   phone?: string
   name?: string
-  /** Present only for sellers. */
   sellerId?: string
-  /** Present only for customers. */
   customerId?: string
 }
-
-/* ------------------------------------------------------------------ */
-/* Order lifecycle                                                     */
-/* ------------------------------------------------------------------ */
 
 export type OrderStatus =
   | 'PLACED'
@@ -80,16 +70,11 @@ export interface Order {
   paymentStatus: PaymentStatus
   paymentUtr?: string
   status: OrderStatus
-  /** The customer's 4-digit code. The seller must enter it to close the order. */
   deliveryOtp: string
   placedAt: string
   events: OrderEvent[]
   sourceShareCode?: string
 }
-
-/* ------------------------------------------------------------------ */
-/* Seller                                                              */
-/* ------------------------------------------------------------------ */
 
 export type SellerStatus =
   | 'REGISTERED'
@@ -99,14 +84,8 @@ export type SellerStatus =
   | 'BLOCKED'
 
 export type BusinessType = 'individual' | 'shg' | 'udyam'
-
 export type DispatchTime = 'same' | '1' | '23'
 
-/**
- * The six digital-usage answers behind the Shanta Mahila Bazar Digital Readiness Index.
- * Collected once at registration and re-measured after training, so the
- * before/after comparison the research design needs is possible at all.
- */
 export interface DigitalProfile {
   smartphone: boolean
   internet: boolean
@@ -118,55 +97,39 @@ export interface DigitalProfile {
 
 export interface Seller {
   id: string
-  /** Shanta Mahila Bazar ID, e.g. WB-ANADUR-001. Printed on packaging and posters. */
   womenBizId: string
-
-  // personal
   name: string
   photo: string
   phone: string
   whatsapp?: string
   age?: number
   education?: string
-
-  // location
   village: string
   villageCode: string
   taluka: string
   district: string
   pincode: string
-
-  // business
   shopName: string
   shopSlug: string
   about?: string
   businessType: BusinessType
   shgName?: string
   yearsInBusiness?: number
-  /** Units she can make per month. Drives what admin can realistically promise. */
   monthlyCapacity?: number
   sellsFood: boolean
   fssai?: string
   fssaiExpiry?: string
-
-  // money in
   upiId: string
   upiVerified: boolean
-
-  // digital readiness
   digital: DigitalProfile
   readinessScore: number
   readinessBand: ReadinessBand
-
-  // shop settings
   isOpen: boolean
   deliveryFee: number
   freeDeliveryAbove: number
   minOrder: number
   dispatch: DispatchTime
   pincodes: string[]
-
-  // platform
   status: SellerStatus
   packsApproved: number
   rating: number
@@ -177,10 +140,6 @@ export interface Seller {
 }
 
 export type ReadinessBand = 'starter' | 'basic' | 'advanced' | 'digital'
-
-/* ------------------------------------------------------------------ */
-/* Products                                                            */
-/* ------------------------------------------------------------------ */
 
 export type ProductStatus =
   | 'DRAFT'
@@ -200,27 +159,19 @@ export interface Product {
   nameEn?: string
   categoryId: string
   isFood: boolean
-
-  // food only - all four are required when isFood is true
   fssai?: string
   fssaiExpiry?: string
   ingredients?: string
   vegType?: 'veg' | 'nonveg'
-
-  // non-food only
   material?: string
-
   price: number
   mrp: number
   unit: Unit
   stock: number
   madeToOrder?: boolean
-
   status: ProductStatus
   rejectReason?: string
-  /** When admin rejected the product. Used for the 48-hour auto-removal window. */
   rejectedAt?: string
-  /** Exact time at which a rejected product is automatically archived. */
   autoDeleteAt?: string
   views: number
   createdAt: string
@@ -234,11 +185,8 @@ export interface Category {
   food: boolean
 }
 
-/* ------------------------------------------------------------------ */
-/* Subscription                                                        */
-/* ------------------------------------------------------------------ */
-
 export type PaymentApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+export type SubscriptionPaymentPurpose = 'REGISTRATION' | 'SLOT_ADDON'
 
 export interface SubscriptionPayment {
   id: string
@@ -252,7 +200,7 @@ export interface SubscriptionPayment {
   screenshotUrl?: string
   submittedAt: string
   status: PaymentApprovalStatus
-  /** Set when the same reference number was already used by someone else. */
+  purpose?: SubscriptionPaymentPurpose
   duplicateUtr: boolean
   verifiedAt?: string
   verifiedBy?: string
@@ -266,10 +214,6 @@ export interface AdminPaymentAccount {
   accountNo: string
   ifsc: string
 }
-
-/* ------------------------------------------------------------------ */
-/* Addresses & cart                                                    */
-/* ------------------------------------------------------------------ */
 
 export interface Address {
   id: string
@@ -291,7 +235,6 @@ export interface CartItem {
   qty: number
 }
 
-/** A cart split into one bucket per seller. Each becomes its own order. */
 export interface SellerGroup {
   sellerId: string
   seller?: Seller
@@ -303,9 +246,15 @@ export interface SellerGroup {
   belowMinimum: boolean
 }
 
-/* ------------------------------------------------------------------ */
-/* Analytics                                                           */
-/* ------------------------------------------------------------------ */
+export interface Feedback {
+  id: string
+  orderId: string
+  sellerId: string
+  customerId: string
+  rating: number
+  comment?: string
+  createdAt: string
+}
 
 export interface WeekDay {
   d: string
@@ -344,13 +293,8 @@ export interface AdminStats {
   readinessBands: { band: ReadinessBand; v: number }[]
 }
 
-/* ------------------------------------------------------------------ */
-/* API envelope                                                        */
-/* ------------------------------------------------------------------ */
-
 export interface ApiError {
   error: string
-  /** Marathi message, safe to show a seller directly. */
   messageMr?: string
   fields?: Record<string, string>
 }
