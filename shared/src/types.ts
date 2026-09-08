@@ -2,7 +2,7 @@
  * Types shared by the frontend and the backend.
  *
  * This folder is the single source of truth for anything that crosses the
- * wire. Both tsconfigs alias it to `@shared/*`, so a change here is a compile
+ * wire. Both tsconfigs alias it to `@shared/*`, so a change there is a compile
  * error on whichever side has not caught up - which is the whole reason this
  * project is in TypeScript.
  */
@@ -218,6 +218,10 @@ export interface Product {
 
   status: ProductStatus
   rejectReason?: string
+  /** When admin rejected the product. Used for the 48-hour auto-removal window. */
+  rejectedAt?: string
+  /** Exact time at which a rejected product is automatically archived. */
+  autoDeleteAt?: string
   views: number
   createdAt: string
 }
