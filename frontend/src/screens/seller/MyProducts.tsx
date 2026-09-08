@@ -5,8 +5,7 @@ import { PRODUCT_STATUS_STYLE } from '@shared/seller.js'
 import { useT } from '../../i18n/I18nProvider.js'
 import { api } from '../../lib/api.js'
 import {
-  AppBar, Button, Card, ConfirmSheet, EmptyState, Loading, Notice,
-  Pill, Rupees, SlotMeter, useAsync,
+  AppBar, Button, Card, ConfirmSheet, EmptyState, Loading, Notice, Pill, Rupees, SlotMeter, useAsync,
 } from '../../components/ui.js'
 
 export default function MyProducts() {
@@ -15,20 +14,18 @@ export default function MyProducts() {
   const [data, loading, setData] = useAsync(() => api.myProducts(), [])
   const [toArchive, setToArchive] = useState<Product | null>(null)
 
-  if (loading) {
-    return <><AppBar title={t('biz.myProducts')} backTo="/seller" /><div className="screen"><Loading /></div></>
-  }
-  if (!data) {
-    return <><AppBar title={t('biz.myProducts')} backTo="/seller" /><div className="screen"><EmptyState title="—" /></div></>
-  }
+  if (loading) return <><AppBar title={t('biz.myProducts')} backTo="/seller" /><div className="screen"><Loading /></div></>
+  if (!data) return <><AppBar title={t('biz.myProducts')} backTo="/seller" /><div className="screen"><EmptyState title="—" /></div></>
 
   const { products, slots } = data
 
   async function togglePause(p: Product) {
-    const res = await api.updateProduct(p.id, {
-      status: p.status === 'PAUSED' ? 'LIVE' : 'PAUSED',
-    })
-    setData({ ...data!, products: products.map((x) => (x.id === res.product.id ? res.product : x)) })
+    try {
+      const res = await api.updateProduct(p.id, { status: p.status === 'PAUSED' ? 'LIVE' : 'PAUSED' })
+      setData({ ...data!, products: products.map((x) => (x.id === res.product.id ? res.product : x)) })
+    } catch {
+      // The shared API error surface is handled by the next load; do not mutate local state on failure.
+    }
   }
 
   async function doArchive() {
@@ -42,66 +39,46 @@ export default function MyProducts() {
     <>
       <AppBar title={t('biz.myProducts')} backTo="/seller" />
       <div className="screen stack">
-        <Card>
-          <SlotMeter
-            used={slots.used}
-            total={slots.total}
-            hint={slots.isFull ? t('biz.slotsFull') : t('biz.slotsLeft', { n: slots.left })}
-          />
-        </Card>
+        <Card><SlotMeter used={slots.used} total={slots.total} hint={slots.isFull ? t('biz.slotsFull') : t('biz.slotsLeft', { n: slots.left })} /></Card>
 
         {products.length === 0 ? (
-          <Card>
-            <EmptyState
-              icon="📦"
-              title={t('prod.noProducts')}
-              body={t('prod.noProductsSub')}
-              action={<Button onClick={() => nav('/seller/upload')}>{t('prod.add')}</Button>}
-            />
-          </Card>
+          <Card><EmptyState icon="📦" title={t('prod.noProducts')} body={t('prod.noProductsSub')} action={<Button onClick={() => nav('/seller/upload')}>{t('prod.add')}</Button>} /></Card>
         ) : (
           <div className="stack-sm">
             {products.map((p) => {
               const style = p.status !== 'ARCHIVED' ? PRODUCT_STATUS_STYLE[p.status] : null
               const outOfStock = !p.madeToOrder && p.stock === 0
+              const deadline = p.autoDeleteAt ? new Date(p.autoDeleteAt) : null
               return (
                 <Card key={p.id}>
                   <div className="row" style={{ alignItems: 'flex-start' }}>
                     <div className="tile__img" aria-hidden="true">{p.emoji}</div>
                     <div className="tile__body">
                       <div className="tile__title">{p.name}</div>
-                      <div className="row" style={{ gap: 6 }}>
-                        <strong><Rupees value={p.price} /></strong>
-                        <span className="small dim">/ {t(`unit.${p.unit}`)}</span>
-                      </div>
+                      <div className="row" style={{ gap: 6 }}><strong><Rupees value={p.price} /></strong><span className="small dim">/ {t(`unit.${p.unit}`)}</span></div>
                       <div className="wrap-row" style={{ marginTop: 4 }}>
                         {style && <Pill tone={style.tone} icon={style.icon}>{t(style.labelKey)}</Pill>}
-                        <Pill tone={outOfStock ? 'danger' : 'neutral'}>
-                          {outOfStock
-                            ? t('prod.outOfStock')
-                            : p.madeToOrder
-                              ? t('prod.madeToOrder')
-                              : `${t('prod.inStock')}: ${p.stock}`}
-                        </Pill>
+                        <Pill tone={outOfStock ? 'danger' : 'neutral'}>{outOfStock ? t('prod.outOfStock') : p.madeToOrder ? t('prod.madeToOrder') : `${t('prod.inStock')}: ${p.stock}`}</Pill>
                       </div>
                     </div>
                   </div>
 
-                  {p.status === 'REJECTED' && p.rejectReason && (
+                  {p.status === 'REJECTED' && (
                     <div style={{ marginTop: 'var(--s3)' }}>
-                      <Notice tone="danger" title={t('prod.rejected')}>{p.rejectReason}</Notice>
+                      <Notice tone="danger" title="उत्पादन नाकारले गेले">
+                        <div>{p.rejectReason ?? 'प्रशासकाने हे उत्पादन मंजूर केले नाही.'}</div>
+                        {deadline && deadline.getTime() > Date.now() && (
+                          <div className="small" style={{ marginTop: 4 }}>
+                            हे उत्पादन 48 तासांनंतर आपोआप काढले जाईल: {deadline.toLocaleString('mr-IN')}
+                          </div>
+                        )}
+                      </Notice>
                     </div>
                   )}
 
                   <div className="btn-row" style={{ marginTop: 'var(--s3)' }}>
-                    {(p.status === 'LIVE' || p.status === 'PAUSED') && (
-                      <Button variant="quiet" size="sm" onClick={() => void togglePause(p)}>
-                        {p.status === 'PAUSED' ? '▶' : '⏸'}
-                      </Button>
-                    )}
-                    <Button variant="ghost" size="sm" onClick={() => setToArchive(p)}>
-                      🗑 {t('prod.archive')}
-                    </Button>
+                    {(p.status === 'LIVE' || p.status === 'PAUSED') && <Button variant="quiet" size="sm" onClick={() => void togglePause(p)}>{p.status === 'PAUSED' ? '▶' : '⏸'}</Button>}
+                    {p.status !== 'REJECTED' && <Button variant="ghost" size="sm" onClick={() => setToArchive(p)}>🗑 {t('prod.archive')}</Button>}
                   </div>
                 </Card>
               )
@@ -109,24 +86,11 @@ export default function MyProducts() {
           </div>
         )}
 
-        <Button onClick={() => nav('/seller/upload')} disabled={slots.isFull}>
-          ➕ {t('prod.add')}
-        </Button>
-        {slots.isFull && (
-          <Notice tone="warn" title={t('prod.slotsFullTitle')}>{t('prod.slotsFullBody')}</Notice>
-        )}
+        <Button onClick={() => nav('/seller/upload')} disabled={slots.isFull}>➕ {t('prod.add')}</Button>
+        {slots.isFull && <Notice tone="warn" title={t('prod.slotsFullTitle')}><div>{t('prod.slotsFullBody')}</div><Button size="sm" onClick={() => nav('/seller/subscription')} style={{ marginTop: 'var(--s2)' }}>💳 {t('biz.addSlots')}</Button></Notice>}
       </div>
 
-      {/* Spells out the consequence, never a bare "Are you sure?" */}
-      <ConfirmSheet
-        open={!!toArchive}
-        title={toArchive?.name ?? ''}
-        body={t('prod.archiveConfirm')}
-        confirmLabel={t('prod.archive')}
-        tone="danger"
-        onCancel={() => setToArchive(null)}
-        onConfirm={() => void doArchive()}
-      />
+      <ConfirmSheet open={!!toArchive} title={toArchive?.name ?? ''} body={t('prod.archiveConfirm')} confirmLabel={t('prod.archive')} tone="danger" onCancel={() => setToArchive(null)} onConfirm={() => void doArchive()} />
     </>
   )
 }
