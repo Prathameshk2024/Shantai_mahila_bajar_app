@@ -6,8 +6,9 @@ import { sellersRouter } from './routes/sellers.routes.js'
 import { productsRouter } from './routes/products.routes.js'
 import { catalogRouter } from './routes/catalog.routes.js'
 import { ordersRouter } from './routes/orders.routes.js'
+import { feedbackRouter } from './routes/feedback.routes.js'
 import { adminRouter } from './routes/admin.routes.js'
-import { resetDb } from './db/store.js'
+import { purgeExpiredRejectedProducts, resetDb } from './db/store.js'
 import { SELLER_WEEK_SEED } from './db/seed.js'
 
 const app = express()
@@ -26,17 +27,13 @@ app.use('/api/sellers', sellersRouter)
 app.use('/api/products', productsRouter)
 app.use('/api/catalog', catalogRouter)
 app.use('/api/orders', ordersRouter)
-
-// Admin has no frontend in this repo by design - the admin site is separate.
+app.use('/api/feedback', feedbackRouter)
 app.use('/api/admin', adminRouter)
 
-// Her growth chart. Real figures come from app_events / product_views once
-// those are being written; the seed keeps the screen honest until then.
 app.get('/api/analytics/seller/:id/week', (req, res) => {
   res.json({ week: SELLER_WEEK_SEED[req.params.id] ?? null })
 })
 
-// Development helper only.
 app.post('/api/dev/reset', (_req, res) => {
   if (process.env.NODE_ENV === 'production') {
     res.status(404).json({ error: 'Not found' })
@@ -57,6 +54,12 @@ app.use((err: Error & { status?: number }, _req: Request, res: Response, _next: 
     messageMr: 'काहीतरी चूक झाली. पुन्हा प्रयत्न करा.',
   })
 })
+
+// Rejected products are retained for exactly 48 hours for seller visibility,
+// then archived automatically even if no API request happens at that moment.
+purgeExpiredRejectedProducts()
+const rejectionCleanup = setInterval(purgeExpiredRejectedProducts, 60_000)
+rejectionCleanup.unref()
 
 app.listen(PORT, () => {
   console.log(`\n  Shanta Mahila Bazar API   http://localhost:${PORT}/api/health`)
