@@ -1,0 +1,5 @@
+/* Text-to-speech/read-aloud was removed from the product UI. */
+button[aria-label="Listen"],
+button[aria-label="ऐका"] {
+  display: none !important;
+}
