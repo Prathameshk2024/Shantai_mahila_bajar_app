@@ -2,10 +2,6 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useT } from '../i18n/I18nProvider.js'
 import { useCart } from '../store/CartContext.js'
 
-/**
- * Four bottom tabs, one level deep, icon AND word together.
- * No hamburger menu anywhere in this app - see docs/FEATURE-SPEC.md section 6.
- */
 interface NavItem {
   to: string
   end?: boolean
@@ -22,9 +18,7 @@ function BottomNav({ items }: { items: NavItem[] }) {
           key={it.to}
           to={it.to}
           end={it.end}
-          className={({ isActive }) =>
-            `bottomnav__item ${isActive ? 'bottomnav__item--on' : ''}`
-          }
+          className={({ isActive }) => `bottomnav__item ${isActive ? 'bottomnav__item--on' : ''}`}
         >
           <span className="bottomnav__icon" aria-hidden="true">
             {it.icon}
@@ -42,14 +36,12 @@ export function SellerLayout() {
   return (
     <div className="app-shell">
       <Outlet />
-      <BottomNav
-        items={[
-          { to: '/seller', end: true, icon: '🏪', label: t('nav.business') },
-          { to: '/seller/upload', icon: '➕', label: t('nav.upload') },
-          { to: '/seller/profile', icon: '👤', label: t('nav.profile') },
-          { to: '/seller/help', icon: '🎓', label: t('nav.help') },
-        ]}
-      />
+      <BottomNav items={[
+        { to: '/seller', end: true, icon: '🏪', label: t('nav.business') },
+        { to: '/seller/upload', icon: '➕', label: t('nav.upload') },
+        { to: '/seller/profile', icon: '👤', label: t('nav.profile') },
+        { to: '/seller/help', icon: '🎓', label: t('nav.help') },
+      ]} />
     </div>
   )
 }
@@ -60,14 +52,15 @@ export function CustomerLayout() {
   return (
     <div className="app-shell">
       <Outlet />
-      <BottomNav
-        items={[
-          { to: '/shop', end: true, icon: '🔍', label: t('nav.explore') },
-          { to: '/shop/categories', icon: '🗂️', label: t('nav.categories') },
-          { to: '/shop/cart', icon: '🧺', label: t('nav.cart'), badge: count },
-          { to: '/shop/profile', icon: '👤', label: t('nav.myProfile') },
-        ]}
-      />
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '0 var(--s3) var(--s2)' }}>
+        <NavLink className="btn btn--quiet btn--sm" to="/shop/feedback">⭐ Feedback</NavLink>
+      </div>
+      <BottomNav items={[
+        { to: '/shop', end: true, icon: '🔍', label: t('nav.explore') },
+        { to: '/shop/categories', icon: '🗂️', label: t('nav.categories') },
+        { to: '/shop/cart', icon: '🧺', label: t('nav.cart'), badge: count },
+        { to: '/shop/profile', icon: '👤', label: t('nav.myProfile') },
+      ]} />
     </div>
   )
 }
