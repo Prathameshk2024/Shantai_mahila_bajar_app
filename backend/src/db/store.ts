@@ -3,17 +3,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { type Db, seed } from './seed.js'
 
-/**
- * Persistence.
- *
- * A JSON file on disk, loaded once and written after every mutation. That is
- * enough for the skeleton and it keeps a demo alive across restarts.
- *
- * To move to Firestore, replace the body of read()/write() and the collection
- * helpers below. No route handler reads the file directly, so nothing above
- * this layer has to change.
- */
-
 const here = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = path.resolve(here, '../../data')
 const DB_FILE = path.join(DATA_DIR, 'db.json')
@@ -29,6 +18,7 @@ function load(): Db {
       if (!Array.isArray(loaded.orders)) loaded.orders = []
       if (!Array.isArray(loaded.payments)) loaded.payments = []
       if (!Array.isArray(loaded.addresses)) loaded.addresses = []
+      if (!Array.isArray(loaded.feedback)) loaded.feedback = []
       return loaded
     }
   } catch (err) {
@@ -49,9 +39,9 @@ function persist(next: Db): void {
 }
 
 /**
- * Rejected products are intentionally retained for 48 hours so the seller can
- * see the rejection and its reason. After that window they are archived,
- * which is the application's existing soft-delete and slot-release behavior.
+ * Rejected products remain visible to the seller for 48 hours with the
+ * rejection reason. After the deadline they are archived, which is the
+ * application's existing soft-delete/slot-release mechanism.
  */
 export function purgeExpiredRejectedProducts(): void {
   const now = Date.now()
@@ -72,8 +62,6 @@ export function purgeExpiredRejectedProducts(): void {
 }
 
 export function getDb(): Db {
-  // Keep expiry correct even when the process has just restarted and before
-  // the background maintenance interval gets its first tick.
   purgeExpiredRejectedProducts()
   return db
 }
@@ -88,7 +76,6 @@ export function resetDb(): Db {
   return db
 }
 
-/** Short, sortable-ish id. Firestore will supply its own; this is a stand-in. */
 export function newId(prefix: string): string {
   return `${prefix}${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`
 }
