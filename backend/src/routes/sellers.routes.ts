@@ -11,10 +11,6 @@ import { requireRole, signToken } from '../middleware/auth.js'
 
 export const sellersRouter: Router = Router()
 
-/* ------------------------------------------------------------------ */
-/* Registration                                                        */
-/* ------------------------------------------------------------------ */
-
 interface RegisterBody {
   phone: string
   name: string
@@ -42,15 +38,6 @@ interface RegisterBody {
   dispatch?: Seller['dispatch']
 }
 
-/**
- * Create the seller record. She is REGISTERED at this point, not ACTIVE - she
- * still has to pay the 50 rupees and have admin approve it before she can
- * publish anything.
- *
- * Everything is validated here even though the client validates too. The client
- * validation exists to give her a fast message in Marathi; this exists because
- * the client can be bypassed.
- */
 sellersRouter.post('/register', (req, res) => {
   const b = req.body as RegisterBody
   const fields: Record<string, string> = {}
@@ -62,9 +49,9 @@ sellersRouter.post('/register', (req, res) => {
   if (!isValidPincode(b.pincode)) fields.pincode = '6 अंकी पिनकोड टाका'
   if (!isValidUpi(b.upiId)) fields.upiId = 'UPI आयडी बरोबर नाही'
   if (b.age != null && (b.age < 18 || b.age > 90)) fields.age = 'वय 18 ते 90 दरम्यान असावे'
+  if (b.yearsInBusiness != null && (b.yearsInBusiness < 0 || b.yearsInBusiness > 100)) fields.yearsInBusiness = 'अनुभवाचे वर्षे बरोबर टाका'
+  if (b.monthlyCapacity != null && (b.monthlyCapacity < 0 || b.monthlyCapacity > 1_000_000)) fields.monthlyCapacity = 'मासिक क्षमता बरोबर टाका'
 
-  // Food sellers must carry FSSAI: the platform is legally obliged to display
-  // the number on every food listing and to pull expired ones.
   if (b.sellsFood) {
     if (!isValidFssai(b.fssai)) fields.fssai = 'FSSAI क्रमांक 14 अंकी असावा आणि 1 किंवा 2 ने सुरू व्हावा'
     if (!b.fssaiExpiry) fields.fssaiExpiry = 'FSSAI मुदत संपण्याची तारीख आवश्यक आहे'
@@ -77,10 +64,7 @@ sellersRouter.post('/register', (req, res) => {
 
   const db = getDb()
   if (db.sellers.some((s) => s.phone === b.phone)) {
-    res.status(409).json({
-      error: 'Already registered',
-      messageMr: 'हा नंबर आधीच नोंदणीकृत आहे. लॉगिन करा.',
-    })
+    res.status(409).json({ error: 'Already registered', messageMr: 'हा नंबर आधीच नोंदणीकृत आहे. लॉगिन करा.' })
     return
   }
 
@@ -92,10 +76,7 @@ sellersRouter.post('/register', (req, res) => {
     socialMedia: !!b.digital?.socialMedia,
     digitalMarketing: !!b.digital?.digitalMarketing,
   }
-  // Baseline score: self-reported only. The four measured factors stay at zero
-  // until she actually does them, which is what makes before/after meaningful.
   const score = computeReadiness(digital)
-
   const womenBizId = makeWomenBizId(b.village, db.sellers.map((s) => s.womenBizId))
   const id = newId('s')
 
@@ -145,17 +126,9 @@ sellersRouter.post('/register', (req, res) => {
 
   db.sellers.push(seller)
   save()
-
   const token = signToken({ role: 'seller', userId: id, phone: b.phone, sellerId: id })
-  res.status(201).json({
-    seller,
-    session: { token, role: 'seller', userId: id, phone: b.phone, name: seller.name, sellerId: id },
-  })
+  res.status(201).json({ seller, session: { token, role: 'seller', userId: id, phone: b.phone, name: seller.name, sellerId: id } })
 })
-
-/* ------------------------------------------------------------------ */
-/* Me                                                                  */
-/* ------------------------------------------------------------------ */
 
 sellersRouter.get('/me', requireRole('seller'), (req, res) => {
   const db = getDb()
@@ -176,33 +149,65 @@ sellersRouter.patch('/me', requireRole('seller'), (req, res) => {
     return
   }
 
-  // Allow-list. Never spread req.body into a stored record - that is how a
-  // seller sets her own status to ACTIVE or grants herself slots.
+  const current = db.sellers[i]!
   const allowed = [
     'name', 'photo', 'whatsapp', 'about', 'shopName', 'isOpen', 'deliveryFee',
     'freeDeliveryAbove', 'minOrder', 'dispatch', 'pincodes', 'monthlyCapacity',
-    'age', 'education', 'yearsInBusiness', 'shgName', 'digital',
+    'age', 'education', 'yearsInBusiness', 'shgName', 'digital', 'village',
+    'taluka', 'district', 'pincode', 'businessType', 'sellsFood', 'fssai', 'fssaiExpiry',
   ] as const
-
-  const current = db.sellers[i]!
   const patch: Partial<Seller> = {}
-  for (const key of allowed) {
-    if (key in req.body) (patch as Record<string, unknown>)[key] = req.body[key]
+  for (const key of allowed) if (key in req.body) (patch as Record<string, unknown>)[key] = req.body[key]
+
+  if ('name' in patch && !String(patch.name ?? '').trim()) {
+    res.status(400).json({ error: 'Bad name', fields: { name: 'नाव आवश्यक आहे' } })
+    return
+  }
+  if ('age' in patch && patch.age != null && (Number(patch.age) < 18 || Number(patch.age) > 90)) {
+    res.status(400).json({ error: 'Bad age', fields: { age: 'वय 18 ते 90 दरम्यान असावे' } })
+    return
+  }
+  if ('pincode' in patch && !isValidPincode(String(patch.pincode))) {
+    res.status(400).json({ error: 'Bad pincode', fields: { pincode: '6 अंकी पिनकोड टाका' } })
+    return
+  }
+  if ('yearsInBusiness' in patch && patch.yearsInBusiness != null && (Number(patch.yearsInBusiness) < 0 || Number(patch.yearsInBusiness) > 100)) {
+    res.status(400).json({ error: 'Bad years', fields: { yearsInBusiness: 'अनुभवाचे वर्षे बरोबर टाका' } })
+    return
+  }
+  if ('monthlyCapacity' in patch && patch.monthlyCapacity != null && (Number(patch.monthlyCapacity) < 0 || Number(patch.monthlyCapacity) > 1_000_000)) {
+    res.status(400).json({ error: 'Bad capacity', fields: { monthlyCapacity: 'मासिक क्षमता बरोबर टाका' } })
+    return
+  }
+  if ('sellsFood' in patch && patch.sellsFood) {
+    const fssai = 'fssai' in patch ? patch.fssai : current.fssai
+    const expiry = 'fssaiExpiry' in patch ? patch.fssaiExpiry : current.fssaiExpiry
+    if (!isValidFssai(fssai)) {
+      res.status(400).json({ error: 'Bad FSSAI', fields: { fssai: 'FSSAI क्रमांक 14 अंकी असावा आणि 1 किंवा 2 ने सुरू व्हावा' } })
+      return
+    }
+    if (!expiry) {
+      res.status(400).json({ error: 'FSSAI expiry required', fields: { fssaiExpiry: 'FSSAI मुदत संपण्याची तारीख आवश्यक आहे' } })
+      return
+    }
   }
 
-  // UPI changes re-enter verification: otherwise it is an account-takeover route.
   if (typeof req.body.upiId === 'string' && req.body.upiId !== current.upiId) {
     if (!isValidUpi(req.body.upiId)) {
       res.status(400).json({ error: 'Bad UPI', fields: { upiId: 'UPI आयडी बरोबर नाही' } })
       return
     }
-    patch.upiId = req.body.upiId
+    patch.upiId = req.body.upiId.trim()
     patch.upiVerified = false
   }
 
-  const next = { ...current, ...patch }
+  if ('village' in patch && patch.village) patch.villageCode = villageCode(String(patch.village))
+  if ('pincode' in patch && patch.pincode) {
+    const pin = String(patch.pincode).trim()
+    patch.pincodes = current.pincodes.includes(pin) ? current.pincodes : [...current.pincodes, pin]
+  }
 
-  // Keep the readiness index in step with what she actually has now.
+  const next = { ...current, ...patch }
   const products = db.products.filter((p) => p.sellerId === next.id && p.status !== 'ARCHIVED')
   const completed = db.orders.filter((o) => o.sellerId === next.id && o.status === 'COMPLETED')
   const { score, band } = recomputeForSeller(next, {
@@ -217,10 +222,6 @@ sellersRouter.patch('/me', requireRole('seller'), (req, res) => {
   save()
   res.json({ seller: next })
 })
-
-/* ------------------------------------------------------------------ */
-/* Public seller pages (customer side + share QR landing)              */
-/* ------------------------------------------------------------------ */
 
 sellersRouter.get('/slug/:slug', (req, res) => {
   const seller = getDb().sellers.find((s) => s.shopSlug === req.params.slug)
@@ -240,17 +241,11 @@ sellersRouter.get('/:id', (req, res) => {
   res.json({ seller: publicView(seller) })
 })
 
-/** Strip what a shopper has no business seeing. */
 function publicView(s: Seller): Partial<Seller> {
   const { phone, whatsapp, age, education, digital, readinessScore, readinessBand, ...rest } = s
-  void phone; void whatsapp; void age; void education
-  void digital; void readinessScore; void readinessBand
+  void phone; void whatsapp; void age; void education; void digital; void readinessScore; void readinessBand
   return rest
 }
-
-/* ------------------------------------------------------------------ */
-/* Subscription: the 50 rupees                                         */
-/* ------------------------------------------------------------------ */
 
 sellersRouter.get('/me/subscription', requireRole('seller'), (req, res) => {
   const db = getDb()
@@ -266,13 +261,10 @@ sellersRouter.get('/me/subscription', requireRole('seller'), (req, res) => {
     account: ADMIN_PAYMENT_ACCOUNT,
     slots: slotInfo(seller, products),
     status: seller.status,
-    payments: db.payments
-      .filter((p) => p.sellerId === sellerId)
-      .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)),
+    payments: db.payments.filter((p) => p.sellerId === sellerId).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)),
   })
 })
 
-/** She has paid and is submitting the reference number. */
 sellersRouter.post('/me/subscription/payment', requireRole('seller'), (req, res) => {
   const db = getDb()
   const sellerId = req.auth!.sellerId!
@@ -282,18 +274,33 @@ sellersRouter.post('/me/subscription/payment', requireRole('seller'), (req, res)
     return
   }
 
-  const utr = String(req.body?.utr ?? '').replace(/\s/g, '')
-  if (utr.length < 6) {
-    res.status(400).json({
-      error: 'UTR required',
-      fields: { utr: 'पेमेंट झाल्यावर मिळणारा क्रमांक टाका' },
-    })
+  const products = db.products.filter((p) => p.sellerId === sellerId && p.status !== 'ARCHIVED')
+  const slots = slotInfo(seller, products)
+  const purpose = seller.status === 'ACTIVE' ? 'SLOT_ADDON' : 'REGISTRATION'
+
+  if (seller.status === 'PAYMENT_SUBMITTED') {
+    res.status(409).json({ error: 'Payment already pending', messageMr: 'तुमचे पेमेंट आधीच तपासणीसाठी पाठवले आहे. पुन्हा पेमेंट करू नका.' })
+    return
+  }
+  if (purpose === 'SLOT_ADDON' && !slots.isFull) {
+    res.status(409).json({ error: 'Slots still available', messageMr: 'अजून उत्पादनाच्या जागा उपलब्ध आहेत. जागा भरल्यानंतरच अतिरिक्त स्लॉटसाठी पेमेंट करा.' })
+    return
+  }
+  if (purpose === 'REGISTRATION' && seller.status !== 'REGISTERED' && seller.status !== 'PAYMENT_REJECTED') {
+    res.status(409).json({ error: 'Registration payment unavailable', messageMr: 'सध्याच्या नोंदणी अवस्थेत पुन्हा पेमेंट करता येणार नाही.' })
     return
   }
 
-  // Reusing one reference number across accounts is the obvious attack on
-  // manual verification, so flag it here rather than hoping admin spots it.
-  const duplicateUtr = db.payments.some((p) => p.utr === utr && p.sellerId !== sellerId)
+  const utr = String(req.body?.utr ?? '').replace(/\s/g, '')
+  if (utr.length < 6) {
+    res.status(400).json({ error: 'UTR required', fields: { utr: 'पेमेंट झाल्यावर मिळणारा क्रमांक टाका' } })
+    return
+  }
+  const duplicateUtr = db.payments.some((p) => p.utr === utr)
+  if (duplicateUtr) {
+    res.status(409).json({ error: 'Duplicate UTR', messageMr: 'हा पेमेंट संदर्भ क्रमांक आधी वापरला गेला आहे.' })
+    return
+  }
 
   const payment: SubscriptionPayment = {
     id: newId('sp'),
@@ -307,11 +314,12 @@ sellersRouter.post('/me/subscription/payment', requireRole('seller'), (req, res)
     screenshotUrl: req.body?.screenshotUrl,
     submittedAt: new Date().toISOString(),
     status: 'PENDING',
-    duplicateUtr,
+    purpose,
+    duplicateUtr: false,
   }
 
   db.payments.unshift(payment)
-  seller.status = 'PAYMENT_SUBMITTED'
+  if (purpose === 'REGISTRATION') seller.status = 'PAYMENT_SUBMITTED'
   save()
   res.status(201).json({ payment, status: seller.status })
 })
