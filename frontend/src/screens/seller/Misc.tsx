@@ -23,6 +23,7 @@ export function SellerProfile() {
   const [draft, setDraft] = useState<Partial<Seller>>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [upiCopied, setUpiCopied] = useState(false)
 
   if (loading || !me) return <><AppBar title={t('prof.title')} /><div className="screen"><Loading /></div></>
 
@@ -51,6 +52,28 @@ export function SellerProfile() {
     }
   }
 
+  async function copyUpi() {
+    let ok = false
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(seller.upiId)
+        ok = true
+      }
+    } catch { /* fall through to legacy copy */ }
+    if (!ok) {
+      const input = document.createElement('textarea')
+      input.value = seller.upiId
+      input.style.position = 'fixed'
+      input.style.left = '-9999px'
+      document.body.appendChild(input)
+      input.select()
+      try { ok = document.execCommand('copy') } catch { ok = false }
+      input.remove()
+    }
+    setUpiCopied(ok)
+    window.setTimeout(() => setUpiCopied(false), 1800)
+  }
+
   return (
     <>
       <AppBar title={t('prof.title')} />
@@ -64,9 +87,7 @@ export function SellerProfile() {
               <div className="small dim num">+91 {seller.phone}</div>
             </div>
           </div>
-          <div style={{ marginTop: 'var(--s3)' }}>
-            <Notice tone="ok"><span className="small dim">{t('reg.yourId')}</span><div className="num" style={{ fontWeight: 800, fontSize: 'var(--t-md)' }}>{seller.womenBizId}</div></Notice>
-          </div>
+          <div style={{ marginTop: 'var(--s3)' }}><Notice tone="ok"><span className="small dim">{t('reg.yourId')}</span><div className="num" style={{ fontWeight: 800, fontSize: 'var(--t-md)' }}>{seller.womenBizId}</div></Notice></div>
           {!editing && <Button size="sm" onClick={startEdit}>✏️ माहिती संपादित करा</Button>}
         </Card>
 
@@ -100,9 +121,7 @@ export function SellerProfile() {
           </Card>
         )}
 
-        <Card>
-          <div className="row-between"><div><div className="small dim">{t('prof.readiness')}</div><strong style={{ fontSize: 'var(--t-lg)' }}>{seller.readinessScore} / 100</strong></div><Pill tone="info">{lang === 'mr' ? BAND_LABEL[seller.readinessBand].mr : BAND_LABEL[seller.readinessBand].en}</Pill></div>
-        </Card>
+        <Card><div className="row-between"><div><div className="small dim">{t('prof.readiness')}</div><strong style={{ fontSize: 'var(--t-lg)' }}>{seller.readinessScore} / 100</strong></div><Pill tone="info">{lang === 'mr' ? BAND_LABEL[seller.readinessBand].mr : BAND_LABEL[seller.readinessBand].en}</Pill></div></Card>
 
         <Card>
           <SectionTitle>{t('prof.subscription')}</SectionTitle>
@@ -112,7 +131,12 @@ export function SellerProfile() {
 
         <Card>
           <SectionTitle>{t('prof.payment')}</SectionTitle>
-          <div className="row-between"><div><div className="small dim">{t('pay.upiId')}</div><strong className="num">{seller.upiId}</strong></div><Pill tone={seller.upiVerified ? 'ok' : 'warn'} icon={seller.upiVerified ? '✓' : '⏳'}>{seller.upiVerified ? t('prof.verified') : t('prof.notVerified')}</Pill></div>
+          <div className="row-between">
+            <div><div className="small dim">{t('pay.upiId')}</div><strong className="num">{seller.upiId}</strong></div>
+            <Button variant="quiet" size="sm" onClick={() => void copyUpi()}>{upiCopied ? '✓ UPI ID copied' : 'Copy UPI ID'}</Button>
+          </div>
+          {upiCopied && <div className="small" style={{ marginTop: 6 }}>UPI ID copied.</div>}
+          <div style={{ marginTop: 8 }}><Pill tone={seller.upiVerified ? 'ok' : 'warn'} icon={seller.upiVerified ? '✓' : '⏳'}>{seller.upiVerified ? t('prof.verified') : t('prof.notVerified')}</Pill></div>
         </Card>
 
         <Card>
@@ -159,16 +183,7 @@ const TRAINING = [
 export function SellerHelp() {
   const t = useT()
   const { lang } = useI18n()
-  return (
-    <>
-      <AppBar title={t('help.title')} />
-      <div className="screen stack">
-        <Card><SectionTitle>{t('help.contact')}</SectionTitle><div className="stack-sm"><a className="btn btn--ghost" href="https://wa.me/919000000000" target="_blank" rel="noreferrer">💬 {t('help.whatsapp')}</a><a className="btn btn--ghost" href="tel:+919000000000">📞 {t('help.call')}</a></div></Card>
-        <div><SectionTitle>{t('help.videos')}</SectionTitle><p className="small dim" style={{ marginTop: -4, marginBottom: 'var(--s2)' }}>{t('help.videosSub')}</p><div className="stack-sm">{TRAINING.map((v) => <button key={v.id} className="tile"><div className="tile__img" aria-hidden="true">{v.icon}</div><div className="tile__body"><div className="tile__title">{lang === 'mr' ? v.mr : v.en}</div><div className="tile__meta">▶ {v.mins} {t('help.minutes')}</div></div></button>)}</div></div>
-        <Card><SectionTitle>{t('help.faq')}</SectionTitle><div className="stack-sm small"><div>• मी ₹50 भरले पण मंजूर झाले नाही</div><div>• पैसे कधी मिळतील?</div><div>• FSSAI परवाना कसा काढायचा?</div><div>• ऑर्डर आल्यावर काय करायचे?</div></div></Card>
-      </div>
-    </>
-  )
+  return <><AppBar title={t('help.title')} /><div className="screen stack"><Card><SectionTitle>{t('help.contact')}</SectionTitle><div className="stack-sm"><a className="btn btn--ghost" href="https://wa.me/919000000000" target="_blank" rel="noreferrer">💬 {t('help.whatsapp')}</a><a className="btn btn--ghost" href="tel:+919000000000">📞 {t('help.call')}</a></div></Card><div><SectionTitle>{t('help.videos')}</SectionTitle><p className="small dim" style={{ marginTop: -4, marginBottom: 'var(--s2)' }}>{t('help.videosSub')}</p><div className="stack-sm">{TRAINING.map((v) => <button key={v.id} className="tile"><div className="tile__img" aria-hidden="true">{v.icon}</div><div className="tile__body"><div className="tile__title">{lang === 'mr' ? v.mr : v.en}</div><div className="tile__meta">▶ {v.mins} {t('help.minutes')}</div></div></button>)}</div></div><Card><SectionTitle>{t('help.faq')}</SectionTitle><div className="stack-sm small"><div>• मी ₹50 भरले पण मंजूर झाले नाही</div><div>• पैसे कधी मिळतील?</div><div>• FSSAI परवाना कसा काढायचा?</div><div>• ऑर्डर आल्यावर काय करायचे?</div></div></Card></div></>
 }
 
 export function SellerGrowth() {
@@ -183,14 +198,5 @@ export function SellerGrowth() {
   const max = Math.max(...week.days.map((d) => d.v), 1)
   const diff = total - week.lastWeekTotal
   const up = diff >= 0
-  return (
-    <>
-      <AppBar title={t('grow.title')} backTo="/seller" />
-      <div className="screen stack">
-        <Card><div className="section-title">{t('grow.earnWeek')}</div><div className="row" style={{ alignItems: 'baseline', gap: 'var(--s3)', flexWrap: 'wrap' }}><span className="hero-num"><Rupees value={total} /></span><span style={{ color: up ? 'var(--ok)' : 'var(--danger)', fontWeight: 700 }}>{up ? '▲' : '▼'} ₹{Math.abs(diff)} {up ? t('grow.more') : t('grow.less')}</span></div><div className="bars" style={{ gridTemplateColumns: `repeat(${week.days.length}, 1fr)`, marginTop: 'var(--s4)' }}>{week.days.map((d) => <div className="bars__col" key={d.dEn}><span className={`bars__v ${d.v === 0 ? 'bars__v--zero' : ''}`}>₹{d.v}</span><div className={`bars__bar ${d.v === 0 ? 'bars__bar--zero' : ''}`} style={{ height: d.v === 0 ? 3 : `${Math.round((d.v / max) * 100)}%` }} /><span className="bars__d">{lang === 'mr' ? d.d : d.dEn}</span></div>)}</div></Card>
-        <div className="row" style={{ gap: 'var(--s3)' }}><Card className="grow"><div className="small dim">{t('grow.ordersWeek')}</div><div className="hero-num num" style={{ fontSize: 'var(--t-xl)' }}>{week.ordersThisWeek}</div><div className="small dim">{t('grow.vsLastWeek')} {week.ordersLastWeek}</div></Card><Card className="grow"><div className="small dim">{t('grow.repeatCustomers')}</div><div className="hero-num num" style={{ fontSize: 'var(--t-xl)' }}>{week.repeatCustomers}</div></Card></div>
-        <Card><div className="section-title">{t('grow.viewsToOrders')}</div><div className="row-between"><div><div className="hero-num num" style={{ fontSize: 'var(--t-lg)' }}>{week.views}</div><div className="small dim">{t('grow.peopleSaw', { n: week.views })}</div></div><span style={{ fontSize: '1.5rem' }} aria-hidden="true">→</span><div style={{ textAlign: 'right' }}><div className="hero-num num" style={{ fontSize: 'var(--t-lg)' }}>{week.ordered}</div><div className="small dim">{t('grow.peopleOrdered', { n: week.ordered })}</div></div></div></Card>
-      </div>
-    </>
-  )
+  return <><AppBar title={t('grow.title')} backTo="/seller" /><div className="screen stack"><Card><div className="section-title">{t('grow.earnWeek')}</div><div className="row" style={{ alignItems: 'baseline', gap: 'var(--s3)', flexWrap: 'wrap' }}><span className="hero-num"><Rupees value={total} /></span><span style={{ color: up ? 'var(--ok)' : 'var(--danger)', fontWeight: 700 }}>{up ? '▲' : '▼'} ₹{Math.abs(diff)} {up ? t('grow.more') : t('grow.less')}</span></div><div className="bars" style={{ gridTemplateColumns: `repeat(${week.days.length}, 1fr)`, marginTop: 'var(--s4)' }}>{week.days.map((d) => <div className="bars__col" key={d.dEn}><span className={`bars__v ${d.v === 0 ? 'bars__v--zero' : ''}`}>₹{d.v}</span><div className={`bars__bar ${d.v === 0 ? 'bars__bar--zero' : ''}`} style={{ height: d.v === 0 ? 3 : `${Math.round((d.v / max) * 100)}%` }} /><span className="bars__d">{lang === 'mr' ? d.d : d.dEn}</span></div>)}</div></Card><div className="row" style={{ gap: 'var(--s3)' }}><Card className="grow"><div className="small dim">{t('grow.ordersWeek')}</div><div className="hero-num num" style={{ fontSize: 'var(--t-xl)' }}>{week.ordersThisWeek}</div><div className="small dim">{t('grow.vsLastWeek')} {week.ordersLastWeek}</div></Card><Card className="grow"><div className="small dim">{t('grow.repeatCustomers')}</div><div className="hero-num num" style={{ fontSize: 'var(--t-xl)' }}>{week.repeatCustomers}</div></Card></div><Card><div className="section-title">{t('grow.viewsToOrders')}</div><div className="row-between"><div><div className="hero-num num" style={{ fontSize: 'var(--t-lg)' }}>{week.views}</div><div className="small dim">{t('grow.peopleSaw', { n: week.views })}</div></div><span style={{ fontSize: '1.5rem' }} aria-hidden="true">→</span><div style={{ textAlign: 'right' }}><div className="hero-num num" style={{ fontSize: 'var(--t-lg)' }}>{week.ordered}</div><div className="small dim">{t('grow.peopleOrdered', { n: week.ordered })}</div></div></div></Card></div></>
 }
