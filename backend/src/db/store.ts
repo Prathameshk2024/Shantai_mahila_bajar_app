@@ -1,35 +1,39 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { Feedback } from '@shared/types.js'
 import { type Db, seed } from './seed.js'
+
+export type StoredDb = Db & { feedback: Feedback[] }
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = path.resolve(here, '../../data')
 const DB_FILE = path.join(DATA_DIR, 'db.json')
 
-let db: Db = load()
+let db: StoredDb = load()
 
-function load(): Db {
+function load(): StoredDb {
   try {
     if (fs.existsSync(DB_FILE)) {
-      const loaded = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) as Db
+      const loaded = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) as Db & { feedback?: Feedback[] }
       if (!Array.isArray(loaded.sellers)) loaded.sellers = []
       if (!Array.isArray(loaded.products)) loaded.products = []
       if (!Array.isArray(loaded.orders)) loaded.orders = []
       if (!Array.isArray(loaded.payments)) loaded.payments = []
       if (!Array.isArray(loaded.addresses)) loaded.addresses = []
       if (!Array.isArray(loaded.feedback)) loaded.feedback = []
-      return loaded
+      return loaded as StoredDb
     }
   } catch (err) {
     console.warn('[db] could not read db.json, reseeding:', (err as Error).message)
   }
-  const fresh = seed()
+  const fresh = seed() as StoredDb
+  fresh.feedback = []
   persist(fresh)
   return fresh
 }
 
-function persist(next: Db): void {
+function persist(next: StoredDb): void {
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true })
     fs.writeFileSync(DB_FILE, JSON.stringify(next, null, 2), 'utf8')
@@ -38,11 +42,6 @@ function persist(next: Db): void {
   }
 }
 
-/**
- * Rejected products remain visible to the seller for 48 hours with the
- * rejection reason. After the deadline they are archived, which is the
- * application's existing soft-delete/slot-release mechanism.
- */
 export function purgeExpiredRejectedProducts(): void {
   const now = Date.now()
   let changed = false
@@ -61,7 +60,7 @@ export function purgeExpiredRejectedProducts(): void {
   if (changed) persist(db)
 }
 
-export function getDb(): Db {
+export function getDb(): StoredDb {
   purgeExpiredRejectedProducts()
   return db
 }
@@ -70,8 +69,9 @@ export function save(): void {
   persist(db)
 }
 
-export function resetDb(): Db {
-  db = seed()
+export function resetDb(): StoredDb {
+  db = seed() as StoredDb
+  db.feedback = []
   persist(db)
   return db
 }
