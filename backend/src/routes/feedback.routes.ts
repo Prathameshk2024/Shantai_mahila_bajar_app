@@ -3,14 +3,10 @@ import type { Feedback } from '@shared/types.js'
 import { getDb, newId, save } from '../db/store.js'
 import { requireRole } from '../middleware/auth.js'
 
-interface FeedbackDb {
-  feedback: Feedback[]
-}
-
 export const feedbackRouter: Router = Router()
 
 feedbackRouter.post('/', requireRole('customer'), (req, res) => {
-  const db = getDb() as typeof getDb extends () => infer T ? T & FeedbackDb : never
+  const db = getDb()
   const orderId = String(req.body?.orderId ?? '')
   const rating = Number(req.body?.rating)
   const comment = typeof req.body?.comment === 'string' ? req.body.comment.trim() : ''
@@ -38,8 +34,7 @@ feedbackRouter.post('/', requireRole('customer'), (req, res) => {
     return
   }
 
-  const existing = db.feedback.find((f) => f.orderId === order.id && f.customerId === req.auth!.customerId)
-  if (existing) {
+  if (db.feedback.some((f) => f.orderId === order.id && f.customerId === req.auth!.customerId)) {
     res.status(409).json({ error: 'Feedback already submitted', messageMr: 'या ऑर्डरसाठी अभिप्राय आधीच दिला आहे' })
     return
   }
@@ -70,12 +65,12 @@ feedbackRouter.post('/', requireRole('customer'), (req, res) => {
 })
 
 feedbackRouter.get('/mine', requireRole('customer'), (req, res) => {
-  const db = getDb() as typeof getDb extends () => infer T ? T & FeedbackDb : never
+  const db = getDb()
   res.json({ feedback: db.feedback.filter((f) => f.customerId === req.auth!.customerId) })
 })
 
 feedbackRouter.get('/admin', requireRole('admin'), (_req, res) => {
-  const db = getDb() as typeof getDb extends () => infer T ? T & FeedbackDb : never
+  const db = getDb()
   res.json({
     feedback: db.feedback
       .map((f) => ({
