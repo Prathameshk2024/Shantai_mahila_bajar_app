@@ -4,6 +4,7 @@ import type {
 import { computeReadiness, readinessBand } from '@shared/readiness.js'
 import type { DigitalProfile } from '@shared/types.js'
 import { deriveCustomersFromOrders } from './customers.js'
+import type { AdminUser, AuthEvent, SessionRecord } from '../auth/types.js'
 
 export interface Db {
   sellers: Seller[]
@@ -11,6 +12,18 @@ export interface Db {
   orders: Order[]
   payments: SubscriptionPayment[]
   customers: Customer[]
+  /**
+   * The auth collections. They live in the same store as everything else so
+   * they get the same durability - a session that vanished on restart would
+   * sign every seller out on each deploy, which is exactly the behaviour the
+   * registry exists to stop.
+   *
+   * They are never seeded. `seed()` fills a demo catalogue; inventing sessions
+   * or administrators would be inventing credentials.
+   */
+  sessions: SessionRecord[]
+  admins: AdminUser[]
+  authEvents: AuthEvent[]
 }
 
 /**
@@ -23,7 +36,10 @@ export interface Db {
  */
 /** A database with nothing in it. What a live install starts from. */
 export function emptyDb(): Db {
-  return { sellers: [], products: [], orders: [], payments: [], customers: [] }
+  return {
+    sellers: [], products: [], orders: [], payments: [], customers: [],
+    sessions: [], admins: [], authEvents: [],
+  }
 }
 
 export function withDefaults(raw: Partial<Db>): Db {
@@ -33,6 +49,9 @@ export function withDefaults(raw: Partial<Db>): Db {
     orders: raw.orders ?? [],
     payments: raw.payments ?? [],
     customers: raw.customers ?? [],
+    sessions: raw.sessions ?? [],
+    admins: raw.admins ?? [],
+    authEvents: raw.authEvents ?? [],
   }
 }
 
@@ -53,7 +72,7 @@ export const CATEGORIES: Category[] = [
 ]
 
 export const ADMIN_PAYMENT_ACCOUNT: AdminPaymentAccount = {
-  label: 'Shanta Mahila Bazar',
+  label: 'Shantai Mahila Bazar',
   upiId: 'shantabazar@okaxis',
   bankName: 'Bank of Maharashtra',
   accountNo: 'XXXXXXXX4471',
@@ -90,15 +109,15 @@ export function seed(): Db {
   const sellers: Seller[] = [
     {
       id: 's1',
-      womenBizId: 'WB-ANADUR-001',
+      womenBizId: 'SMB-ANADUR-01',
       name: 'सुनीता पाटील', photo: '👩🏽', phone: '9822011223', whatsapp: '9822011223',
       age: 38, education: 'secondary',
       village: 'आणदुर', villageCode: 'ANADUR', taluka: 'तुळजापूर', district: 'धाराशिव', pincode: '413601',
-      shopName: 'सुनीता गृहउद्योग', shopSlug: 'sunitagruhaudyoga-wb-anadur-001',
+      shopName: 'सुनीता गृहउद्योग', shopSlug: 'sunitagruhaudyoga-smb-anadur-01',
       about: 'गेली 12 वर्षे मी घरी लोणची आणि मसाले बनवते. सर्व पदार्थ घरचेच.',
       businessType: 'shg', shgName: 'जिजाऊ महिला बचत गट',
       yearsInBusiness: 12, monthlyCapacity: 120,
-      sellsFood: true, fssai: '21522004000123', fssaiExpiry: '2027-03-31',
+      sellsFood: true,
       upiId: 'sunita@ybl', upiVerified: true,
       digital: d1, ...scored(d1, [true, true, true, true]),
       isOpen: true, deliveryFee: 20, freeDeliveryAbove: 500, minOrder: 100,
@@ -108,11 +127,11 @@ export function seed(): Db {
     },
     {
       id: 's2',
-      womenBizId: 'WB-JEVALI-001',
+      womenBizId: 'SMB-JEVALI-01',
       name: 'मंगल जाधव', photo: '👩🏻', phone: '9764455661', whatsapp: '9764455661',
       age: 45, education: 'middle',
       village: 'जेवळी', villageCode: 'JEVALI', taluka: 'तुळजापूर', district: 'धाराशिव', pincode: '413603',
-      shopName: 'मंगल हातमाग', shopSlug: 'mangalahatamaga-wb-jevali-001',
+      shopName: 'मंगल हातमाग', shopSlug: 'mangalahatamaga-smb-jevali-01',
       about: 'बचत गटातर्फे आम्ही हातमागाच्या साड्या आणि चादरी बनवतो.',
       businessType: 'shg', shgName: 'सावित्री महिला बचत गट',
       yearsInBusiness: 8, monthlyCapacity: 25,
@@ -126,15 +145,15 @@ export function seed(): Db {
     },
     {
       id: 's3',
-      womenBizId: 'WB-BHOSGA-001',
+      womenBizId: 'SMB-BHOSGA-01',
       name: 'कविता शिंदे', photo: '👩🏾', phone: '9890033441',
       age: 31, education: 'higher',
       village: 'भोसगा', villageCode: 'BHOSGA', taluka: 'तुळजापूर', district: 'धाराशिव', pincode: '413604',
-      shopName: 'कविता गृहउद्योग', shopSlug: 'kavitagruhaudyoga-wb-bhosga-001',
+      shopName: 'कविता गृहउद्योग', shopSlug: 'kavitagruhaudyoga-smb-bhosga-01',
       about: 'सणासुदीला लागणारे सर्व घरगुती पदार्थ.',
       businessType: 'individual',
       yearsInBusiness: 3, monthlyCapacity: 60,
-      sellsFood: true, fssai: '11523005000456', fssaiExpiry: '2026-11-30',
+      sellsFood: true,
       upiId: 'kavitas@paytm', upiVerified: false,
       digital: d3, ...scored(d3, [false, true, false, false]),
       isOpen: true, deliveryFee: 0, freeDeliveryAbove: 0, minOrder: 150,
@@ -146,19 +165,19 @@ export function seed(): Db {
 
   const products: Product[] = [
     { id: 'p1', sellerId: 's1', emoji: '🫙', name: 'आंब्याचे लोणचे', nameEn: 'Mango Pickle',
-      categoryId: 'pickle', isFood: true, fssai: '21522004000123', fssaiExpiry: '2027-03-31',
+      categoryId: 'pickle', isFood: true,
       ingredients: 'कैरी, मोहरी, मेथी, हळद, तिखट, तेल, मीठ', vegType: 'veg',
       price: 220, mrp: 250, unit: 'kg', stock: 12, status: 'LIVE', views: 184, createdAt: daysAgo(80) },
     { id: 'p2', sellerId: 's1', emoji: '🌶️', name: 'कांदा लसूण मसाला', nameEn: 'Kanda Lasun Masala',
-      categoryId: 'pickle', isFood: true, fssai: '21522004000123', fssaiExpiry: '2027-03-31',
+      categoryId: 'pickle', isFood: true,
       ingredients: 'लाल मिरची, कांदा, लसूण, खोबरे, तीळ, मीठ', vegType: 'veg',
       price: 180, mrp: 200, unit: 'g', stock: 8, status: 'LIVE', views: 141, createdAt: daysAgo(75) },
     { id: 'p3', sellerId: 's1', emoji: '🥟', name: 'तांदळाचे पापड', nameEn: 'Rice Papad',
-      categoryId: 'namkeen', isFood: true, fssai: '21522004000123', fssaiExpiry: '2027-03-31',
+      categoryId: 'namkeen', isFood: true,
       ingredients: 'तांदूळ पीठ, जिरे, मीठ, पापडखार', vegType: 'veg',
       price: 90, mrp: 0, unit: 'g', stock: 0, status: 'LIVE', views: 63, createdAt: daysAgo(40) },
     { id: 'p4', sellerId: 's1', emoji: '🍯', name: 'घरगुती तूप', nameEn: 'Homemade Ghee',
-      categoryId: 'food', isFood: true, fssai: '21522004000123', fssaiExpiry: '2027-03-31',
+      categoryId: 'food', isFood: true,
       ingredients: 'गाईचे दूध', vegType: 'veg',
       price: 650, mrp: 700, unit: 'litre', stock: 4, status: 'PENDING', views: 0, createdAt: hoursAgo(20) },
     { id: 'p5', sellerId: 's2', emoji: '🥻', name: 'पैठणी साडी', nameEn: 'Paithani Saree',
@@ -174,11 +193,11 @@ export function seed(): Db {
       categoryId: 'embroidery', isFood: false, material: 'सुती कापड, रेशमी धागा',
       price: 280, mrp: 350, unit: 'set', stock: 9, status: 'LIVE', views: 44, createdAt: daysAgo(15) },
     { id: 'p9', sellerId: 's3', emoji: '🍬', name: 'पुरणपोळी', nameEn: 'Puran Poli',
-      categoryId: 'sweets', isFood: true, fssai: '11523005000456', fssaiExpiry: '2026-11-30',
+      categoryId: 'sweets', isFood: true,
       ingredients: 'गहू, हरभरा डाळ, गूळ, वेलची, तूप', vegType: 'veg',
       price: 40, mrp: 0, unit: 'piece', stock: 0, madeToOrder: true, status: 'LIVE', views: 208, createdAt: daysAgo(18) },
     { id: 'p10', sellerId: 's3', emoji: '🥮', name: 'बेसन लाडू', nameEn: 'Besan Ladoo',
-      categoryId: 'sweets', isFood: true, fssai: '11523005000456', fssaiExpiry: '2026-11-30',
+      categoryId: 'sweets', isFood: true,
       ingredients: 'बेसन, साखर, तूप, वेलची', vegType: 'veg',
       price: 380, mrp: 420, unit: 'kg', stock: 5, status: 'LIVE', views: 133, createdAt: daysAgo(12) },
     { id: 'p11', sellerId: 's3', emoji: '🕯️', name: 'सुगंधी अगरबत्ती', nameEn: 'Incense Sticks',
@@ -237,14 +256,13 @@ export function seed(): Db {
       items: [{ productId: 'p2', name: 'कांदा लसूण मसाला', emoji: '🌶️', qty: 1, price: 180 }],
       itemsTotal: 180, deliveryFee: 20, total: 200,
       paymentMode: 'UPI', paymentStatus: 'UPI_CONFIRMED', paymentUtr: '430918776541',
-      status: 'COMPLETED', placedAt: hoursAgo(9),
+      status: 'DELIVERED', placedAt: hoursAgo(9),
       events: [
         { to: 'PLACED', at: hoursAgo(9), by: 'customer' },
         { to: 'ACCEPTED', at: hoursAgo(8), by: 'seller' },
         { to: 'PACKED', at: hoursAgo(7), by: 'seller' },
         { to: 'OUT_FOR_DELIVERY', at: hoursAgo(5), by: 'seller' },
         { to: 'DELIVERED', at: hoursAgo(4), by: 'seller' },
-        { to: 'COMPLETED', at: hoursAgo(2), by: 'system' },
       ],
     },
     {
@@ -264,16 +282,16 @@ export function seed(): Db {
   ]
 
   const payments: SubscriptionPayment[] = [
-    { id: 'sp1', sellerId: 's4', sellerName: 'शोभा गायकवाड', womenBizId: 'WB-CHIVARI-001',
+    { id: 'sp1', sellerId: 's4', sellerName: 'शोभा गायकवाड', womenBizId: 'SMB-CHIVARI-01',
       phone: '9764112233', amount: 50, utr: '512309887711', payerUpi: 'shobha@ybl',
       submittedAt: hoursAgo(4), status: 'PENDING', duplicateUtr: false },
-    { id: 'sp2', sellerId: 's5', sellerName: 'वैशाली पवार', womenBizId: 'WB-RUDRAWADI-001',
+    { id: 'sp2', sellerId: 's5', sellerName: 'वैशाली पवार', womenBizId: 'SMB-RUDRAWADI-01',
       phone: '9822556677', amount: 50, utr: '431209887654', payerUpi: 'vaishali@okhdfcbank',
       submittedAt: hoursAgo(19), status: 'PENDING', duplicateUtr: true },
-    { id: 'sp3', sellerId: 's6', sellerName: 'लता कांबळे', womenBizId: 'WB-ANADUR-002',
+    { id: 'sp3', sellerId: 's6', sellerName: 'लता कांबळे', womenBizId: 'SMB-ANADUR-02',
       phone: '9011778899', amount: 50, utr: '509911223344', payerUpi: 'lata.k@paytm',
       submittedAt: hoursAgo(50), status: 'PENDING', duplicateUtr: false },
-    { id: 'sp4', sellerId: 's1', sellerName: 'सुनीता पाटील', womenBizId: 'WB-ANADUR-001',
+    { id: 'sp4', sellerId: 's1', sellerName: 'सुनीता पाटील', womenBizId: 'SMB-ANADUR-01',
       phone: '9822011223', amount: 50, utr: '401122334455', payerUpi: 'sunita@ybl',
       submittedAt: daysAgo(30), status: 'APPROVED', duplicateUtr: false, verifiedAt: daysAgo(30) },
   ]
@@ -283,25 +301,10 @@ export function seed(): Db {
   // fresh install and a migrated database end up with identical records.
   const customers = deriveCustomersFromOrders(orders)
 
-  return { sellers, products, orders, payments, customers }
+  // The auth collections start empty even in the demo seed. A seeded session
+  // would be a working credential committed to the repository, and a seeded
+  // administrator would be a known password on every fresh install - which is
+  // exactly the shape of the default `changeme` this change exists to remove.
+  return { sellers, products, orders, payments, customers, sessions: [], admins: [], authEvents: [] }
 }
 
-export const SELLER_WEEK_SEED: Record<string, unknown> = {
-  s1: {
-    days: [
-      { d: 'सोम', dEn: 'Mon', v: 240 },
-      { d: 'मंगळ', dEn: 'Tue', v: 0 },
-      { d: 'बुध', dEn: 'Wed', v: 560 },
-      { d: 'गुरु', dEn: 'Thu', v: 320 },
-      { d: 'शुक्र', dEn: 'Fri', v: 180 },
-      { d: 'शनि', dEn: 'Sat', v: 890 },
-      { d: 'रवि', dEn: 'Sun', v: 640 },
-    ],
-    lastWeekTotal: 2190,
-    ordersThisWeek: 11,
-    ordersLastWeek: 8,
-    views: 388,
-    ordered: 11,
-    repeatCustomers: 3,
-  },
-}

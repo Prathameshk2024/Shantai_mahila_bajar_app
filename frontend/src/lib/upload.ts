@@ -1,4 +1,5 @@
 import { getToken } from './api.js'
+import { takeRegisterTicket } from './registerTicket.js'
 
 /**
  * Product photo upload.
@@ -16,6 +17,31 @@ import { getToken } from './api.js'
 const BASE = import.meta.env.VITE_API_URL ?? ''
 const MAX_EDGE = 1200
 const QUALITY = 0.75
+
+/**
+ * The largest file we will accept off the picker.
+ *
+ * Everything is downscaled to 1200px before it leaves the phone, so this is
+ * not a bandwidth limit - it is a guard against the wrong FILE. A gallery
+ * picker will happily hand back a video or a 40MP RAW, and `createImageBitmap`
+ * on one of those either takes half a minute or runs the tab out of memory, on
+ * exactly the cheap phones this app is for.
+ *
+ * 8MB clears any phone camera JPEG (3-6MB is typical at 12MP) with room to
+ * spare, and sits under Cloudinary's 10MB image ceiling so a file that passes
+ * here cannot then be refused at the far end.
+ */
+export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+export const MAX_UPLOAD_MB = 8
+
+/** Thrown before anything is read, so the message can name the real limit. */
+export class FileTooLargeError extends Error {
+  constructor(public bytes: number) {
+    super(`file is ${(bytes / 1024 / 1024).toFixed(1)}MB, over the ${MAX_UPLOAD_MB}MB limit`)
+  }
+}
+
+export class NotAnImageError extends Error {}
 
 export interface UploadedImage {
   url: string
@@ -74,13 +100,23 @@ interface Signature {
 
 async function getSignature(kind: 'product' | 'payment'): Promise<Signature> {
   const token = getToken()
+
+  /**
+   * During REGISTRATION there is no session yet - the seller record is created
+   * at the very end - so her registration ticket is the proof she offers
+   * instead. The server accepts either. Without this the payment-QR upload on
+   * the last wizard screen answered 401, which the app could only report as
+   * "the photo could not be sent".
+   */
+  const ticket = token ? '' : takeRegisterTicket()
+
   const res = await fetch(`${BASE}/api/uploads/signature`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ kind }),
+    body: JSON.stringify({ kind, ticket }),
   })
   if (res.status === 503) {
     throw new UploadDisabledError('Cloudinary is not configured')
@@ -98,6 +134,11 @@ export async function uploadImage(
   opts: { kind?: 'product' | 'payment'; onProgress?: (fraction: number) => void } = {},
 ): Promise<UploadedImage> {
   const { kind = 'product', onProgress } = opts
+
+  // Checked before a byte is read, so a wrong file fails instantly with a
+  // message that names the limit rather than after a long silent stall.
+  if (!file.type.startsWith('image/')) throw new NotAnImageError(file.type)
+  if (file.size > MAX_UPLOAD_BYTES) throw new FileTooLargeError(file.size)
 
   const blob = await shrinkImage(file)
   const sig = await getSignature(kind)

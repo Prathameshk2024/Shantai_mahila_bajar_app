@@ -3,9 +3,15 @@ import type { Order, OrderStatus, PaymentMode, PaymentStatus } from './types.js'
 /**
  * THE ORDER STATE MACHINE
  * =======================
- * Locked - six states, this order, no additions:
+ * Locked - five states, this order, no additions:
  *
- *   PLACED -> ACCEPTED -> PACKED -> OUT_FOR_DELIVERY -> DELIVERED -> COMPLETED
+ *   PLACED -> ACCEPTED -> PACKED -> OUT_FOR_DELIVERY -> DELIVERED
+ *
+ * DELIVERED is the end. There was a COMPLETED after it, and it meant nothing
+ * to either side: the seller had already handed the goods over and been paid,
+ * the customer already had them, and no screen offered a way to reach it - so
+ * every real order sat at DELIVERED with one greyed-out step below it,
+ * implying something was still outstanding when nothing was.
  *
  * Payment is deliberately NOT a step in this chain. It sits on its own axis,
  * because a cash order and a UPI order have to walk the same six screens.
@@ -26,7 +32,6 @@ export const HAPPY_PATH: OrderStatus[] = [
   'PACKED',
   'OUT_FOR_DELIVERY',
   'DELIVERED',
-  'COMPLETED',
 ]
 
 export interface SellerAction {
@@ -57,7 +62,6 @@ export const SELLER_ACTIONS: Record<OrderStatus, SellerAction[]> = {
     { to: 'DELIVERED', labelKey: 'ord.markDelivered', tone: 'primary' },
   ],
   DELIVERED: [],
-  COMPLETED: [],
   REJECTED: [],
   CANCELLED: [],
 }
@@ -72,7 +76,6 @@ export const STATUS_STYLE: Record<
   PACKED: { icon: '📦', tone: 'info' },
   OUT_FOR_DELIVERY: { icon: '🛵', tone: 'info' },
   DELIVERED: { icon: '✅', tone: 'ok' },
-  COMPLETED: { icon: '✅', tone: 'ok' },
   REJECTED: { icon: '✖', tone: 'danger' },
   CANCELLED: { icon: '✖', tone: 'danger' },
 }

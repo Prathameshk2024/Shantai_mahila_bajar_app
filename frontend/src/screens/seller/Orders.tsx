@@ -7,17 +7,20 @@ import {
 } from '@shared/orderFlow.js'
 import { useT } from '../../i18n/I18nProvider.js'
 import { api, ApiError } from '../../lib/api.js'
+import { useToast } from '../../store/ToastContext.js'
 import {
-  AppBar, AudioHelpButton, Button, Card, Choice, ConfirmSheet, EmptyState,
+  AppBar, Button, Card, Choice, ConfirmSheet, EmptyState,
   Loading, Notice, Pill, Rupees, useAsync,
 } from '../../components/ui.js'
+import { IconCall, IconCheck, IconMap, IconOrders } from '../../components/icons.js'
 
 const TABS: { id: string; labelKey: string; statuses?: OrderStatus[] }[] = [
   { id: 'action', labelKey: 'biz.needsAction' },
-  { id: 'new', labelKey: 'ord.new', statuses: ['PLACED'] },
-  { id: 'accepted', labelKey: 'ord.accepted', statuses: ['ACCEPTED', 'PACKED'] },
-  { id: 'out', labelKey: 'ord.outForDelivery', statuses: ['OUT_FOR_DELIVERY'] },
-  { id: 'done', labelKey: 'ord.delivered', statuses: ['DELIVERED', 'COMPLETED'] },
+  // ACCEPTED, PACKED and OUT_FOR_DELIVERY are one tab: from her side they are
+  // the same order, in hand and not yet delivered. Splitting them gave three
+  // tabs that were each empty most of the time.
+  { id: 'accepted', labelKey: 'ord.accepted', statuses: ['ACCEPTED', 'PACKED', 'OUT_FOR_DELIVERY'] },
+  { id: 'done', labelKey: 'ord.delivered', statuses: ['DELIVERED'] },
   { id: 'cancelled', labelKey: 'ord.cancelled', statuses: ['REJECTED', 'CANCELLED'] },
 ]
 
@@ -57,7 +60,7 @@ export function SellerOrders() {
         {loading ? (
           <Loading />
         ) : list.length === 0 ? (
-          <Card><EmptyState icon="🧾" title={t('ord.noOrders')} body={t('ord.noOrdersSub')} /></Card>
+          <Card><EmptyState icon={IconOrders} title={t('ord.noOrders')} body={t('ord.noOrdersSub')} /></Card>
         ) : (
           list.map((o) => (
             <button key={o.id} className="tile" onClick={() => nav(`/seller/orders/${o.id}`)}>
@@ -87,6 +90,7 @@ export function SellerOrders() {
 export function SellerOrderDetail() {
   const { orderId } = useParams()
   const t = useT()
+  const { toast } = useToast()
   const [data, loading, setData] = useAsync(() => api.order(orderId!), [orderId])
 
   const [confirm, setConfirm] = useState<SellerAction | null>(null)
@@ -113,6 +117,9 @@ export function SellerOrderDetail() {
       const res = await api.advanceOrder(order.id, action.to, extra)
       setData({ ...data!, order: res.order })
       setRejectOpen(false)
+      // Names the state she just moved it to, not a generic "saved" - the
+      // whole doubt on this screen is which step the order is on now.
+      toast(`${t('ok.orderUpdated')}: ${t(statusLabelKey(res.order.status))}`)
     } catch (e) {
       if (e instanceof ApiError) setActionErr(e.messageMr ?? e.message)
     } finally {
@@ -124,6 +131,7 @@ export function SellerOrderDetail() {
     setBusy(true)
     const res = await api.confirmPayment(order.id)
     setData({ ...data!, order: res.order })
+    toast(t('ok.paymentConfirmed'))
     setBusy(false)
   }
 
@@ -132,7 +140,6 @@ export function SellerOrderDetail() {
       <AppBar
         title={`${t('ord.order')} ${order.id}`}
         backTo="/seller/orders"
-        right={<AudioHelpButton text={`${t(statusLabelKey(order.status))}. ${order.customerName}. ${order.total} ${t('common.rupees')}.`} />}
       />
 
       <div className="screen stack">
@@ -146,12 +153,12 @@ export function SellerOrderDetail() {
             <div className="stack-sm">
               <strong>{t('ord.paymentPending')}</strong>
               <div className="small muted">UTR: <span className="num">{order.paymentUtr}</span></div>
-              <Button onClick={confirmPayment} disabled={busy}>✓ {t('ord.paymentGot')}</Button>
+              <Button onClick={confirmPayment} disabled={busy}><IconCheck aria-hidden="true" /> {t('ord.paymentGot')}</Button>
             </div>
           </Card>
         )}
         {order.paymentStatus === 'UPI_CONFIRMED' && (
-          <Notice tone="ok">✓ {t('ord.paymentDone')} · UPI</Notice>
+          <Notice tone="ok"><IconCheck aria-hidden="true" /> {t('ord.paymentDone')} · UPI</Notice>
         )}
         {order.paymentMode === 'COD' && (
           <Notice tone="info">{t('ord.paymentCod')} · <Rupees value={order.total} /></Notice>
@@ -192,7 +199,7 @@ export function SellerOrderDetail() {
             <div className="small dim num">{order.pincode}</div>
             <div className="btn-row" style={{ marginTop: 'var(--s2)' }}>
               <a className="btn btn--ghost btn--sm" href={`tel:${order.customerPhone}`}>
-                📞 {t('ord.callCustomer')}
+                <IconCall aria-hidden="true" /> {t('ord.callCustomer')}
               </a>
               <a
                 className="btn btn--ghost btn--sm"
@@ -200,7 +207,7 @@ export function SellerOrderDetail() {
                 target="_blank"
                 rel="noreferrer"
               >
-                📍 {t('ord.openMap')}
+                <IconMap aria-hidden="true" /> {t('ord.openMap')}
               </a>
             </div>
           </div>
@@ -288,7 +295,7 @@ export function Timeline({ order }: { order: Order }) {
         return (
           <div key={s} className={`tl ${cls}`}>
             <div className="tl__dot" aria-hidden="true">
-              {i < current ? '✓' : i === current ? STATUS_STYLE[s].icon : ''}
+              {i < current ? <IconCheck aria-hidden="true" /> : i === current ? STATUS_STYLE[s].icon : ''}
             </div>
             <div>
               <div className="tl__label">{t(statusLabelKey(s))}</div>

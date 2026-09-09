@@ -4,6 +4,8 @@ import {
 } from 'react'
 import { useI18n } from '../i18n/I18nProvider.js'
 import { ApiError } from '../lib/api.js'
+import { useToast } from '../store/ToastContext.js'
+import { IconCopy, IconEmpty, IconWarn, type IconType } from './icons.js'
 
 /* ------------------------------------------------------------------ */
 /* Primitives                                                          */
@@ -50,10 +52,12 @@ export function Loading() {
   return <div className="spinner" role="status" aria-live="polite" />
 }
 
-export function EmptyState({ icon, title, body }: { icon: string; title: string; body?: string }) {
+export function EmptyState({
+  icon: Icon = IconEmpty, title, body,
+}: { icon?: IconType; title: string; body?: string }) {
   return (
     <div className="empty">
-      <div className="empty__i" aria-hidden="true">{icon}</div>
+      <div className="empty__i" aria-hidden="true"><Icon /></div>
       <div className="empty__t">{title}</div>
       {body && <div className="small">{body}</div>}
     </div>
@@ -81,7 +85,11 @@ export function Field({
     <div className="field">
       <label className="field__l">{label}</label>
       {children}
-      {error && <div className="field__err" role="alert">⚠ {error}</div>}
+      {error && (
+        <div className="field__err" role="alert">
+          <IconWarn aria-hidden="true" /> {error}
+        </div>
+      )}
     </div>
   )
 }
@@ -151,4 +159,43 @@ export function useAsync<T>(
 
   const reload = useCallback(() => setNonce((n) => n + 1), [])
   return [state.data, state.loading, state.error, reload]
+}
+
+/**
+ * A value worth having on the clipboard - a UPI ID, mostly.
+ *
+ * An admin reconciling a bank statement retypes these by hand, and a UPI ID
+ * mistyped by one character pays a stranger. The confirmation is not
+ * decoration: the clipboard is invisible, so without it there is no way to
+ * tell a copy that worked from one the browser refused.
+ */
+export function CopyValue({
+  value, label, copiedText,
+}: {
+  value: string
+  label: string
+  copiedText: string
+}) {
+  const { toast } = useToast()
+  if (!value) return null
+  return (
+    <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+      <span className="mono">{value}</span>
+      <Button
+        small
+        variant="quiet"
+        aria-label={label}
+        onClick={() => {
+          navigator.clipboard
+            .writeText(value)
+            .then(() => toast(copiedText))
+            // Insecure context, or permission refused. Say so rather than let
+            // her walk away believing she has it.
+            .catch(() => toast(label, 'warn'))
+        }}
+      >
+        <IconCopy aria-hidden="true" /> {label}
+      </Button>
+    </span>
+  )
 }

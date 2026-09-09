@@ -77,6 +77,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .grow { flex: 1; min-width: 0; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Icons are 1em, so the containing font-size sizes them. These are the places
+   where the container has no text of its own to inherit from. */
+.navlink__icon svg, .seccard__icon svg, .empty__i svg,
+.allclear__i svg, .field__err svg, .btn svg, .seccard__go svg { display: block; }
+.field__err { display: flex; align-items: center; gap: 5px; }
+
 /* ================= shell ================= */
 
 .shell { display: flex; min-height: 100%; }
@@ -94,9 +100,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 
 .side__brand {
-  padding: 16px 16px 14px;
+  padding: 14px 16px 12px;
   border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 10px;
 }
+/* The mark carries its own gold ring, so no border or background here -
+   either would print a second ring around it. */
+.side__logo { width: 46px; height: 46px; flex: 0 0 auto; border-radius: 50%; display: block; }
+.min0 { min-width: 0; }
 .side__name { font-weight: 700; color: var(--maroon); line-height: 1.2; }
 .side__role {
   font-size: 11px;
@@ -111,8 +122,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .navlink {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 8px 10px;
+  gap: 10px;
+  padding: 9px 10px;
   border-radius: var(--r);
   color: var(--ink-2);
   text-decoration: none;
@@ -125,7 +136,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-weight: 600;
   box-shadow: inset 3px 0 0 var(--maroon);
 }
-.navlink__icon { width: 18px; text-align: center; }
+.navlink__icon {
+  width: 18px; flex: none;
+  display: grid; place-items: center;
+  font-size: 16px;
+  color: var(--ink-3);
+}
+.navlink:hover .navlink__icon { color: var(--ink-2); }
+.navlink--on .navlink__icon { color: var(--maroon); }
 .navlink__badge {
   margin-inline-start: auto;
   font-family: var(--mono);
@@ -194,7 +212,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .card--flush { padding: 0; overflow: hidden; }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(136px, 1fr)); gap: 10px; }
+/* Every tile the same height whatever its label does, so a two-line caption
+   does not leave a short neighbour floating. */
+.tiles > * { display: flex; flex-direction: column; justify-content: center; min-height: 74px; }
 
 .tile {
   background: var(--surface);
@@ -292,8 +313,19 @@ table.t tr:last-child td { border-bottom: 0; }
 /* ================= states ================= */
 
 .empty { text-align: center; padding: 44px 20px; color: var(--ink-2); }
-.empty__i { font-size: 34px; }
-.empty__t { font-weight: 700; color: var(--ink); margin-top: 6px; }
+.empty__i {
+  width: 52px; height: 52px; margin: 0 auto; border-radius: 50%;
+  background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--ink-3);
+  display: grid; place-items: center; font-size: 24px;
+}
+.empty__t { font-weight: 700; color: var(--ink); margin-top: 10px; }
+
+.allclear__i {
+  width: 34px; height: 34px; flex: none; border-radius: 50%;
+  background: var(--ok-soft); color: var(--green);
+  display: grid; place-items: center; font-size: 18px;
+}
 
 .notice {
   border: 1px solid var(--line-2);
@@ -317,18 +349,105 @@ table.t tr:last-child td { border-bottom: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.5s; } }
 
-/* ================= sign in ================= */
+/* ================= sign in =================
+ * One centred column, everything on the same 340px axis.
+ * It read as uneven because the heading, the card and the language toggle each
+ * found their own width: the brand sat flush left of a card that was wider
+ * than it, and the toggle stretched wider still. One max-width on the column
+ * lines all three up. */
 
-.signin { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-.signin__card { width: 100%; max-width: 360px; }
+.signin {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  /* A hairline of brand at the top, so the sign-in page belongs to the
+     console rather than looking like a stray form on a cream background. */
+  border-top: 3px solid var(--maroon);
+}
+.signin__card { width: 100%; max-width: 340px; gap: 14px; }
+.signin__brand { text-align: center; }
+.signin__logo { width: 96px; height: 96px; border-radius: 50%; display: block; margin: 0 auto 12px; }
+.signin__name { font-weight: 800; font-size: 19px; color: var(--maroon); line-height: 1.2; }
+.signin__sub {
+  font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-3); margin-top: 4px;
+}
+.signin__card .card { padding: 18px; }
+.signin__card h1 { font-size: 16px; margin: 0 0 10px; }
+/* The submit button is the only full-width control on the page. */
+.signin__card .btn { width: 100%; justify-content: center; padding: 9px 13px; }
 
 /* ================= charts ================= */
+
+/* Two charts to a row on a desk, one on a laptop half-screen. 300px is the
+   narrowest a donut plus its legend stays readable at. */
+.chartgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+
+.chart__t { font-weight: 700; font-size: 14px; margin: 0 0 2px; }
+.chart__d { font-size: 12.5px; color: var(--ink-3); margin: 0 0 12px; }
+
+.donut { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.donut__svg { width: 148px; height: 148px; flex: none; }
+/* Text wears TEXT colours, never a series colour - the swatch beside a label
+   is what carries identity. */
+.donut__total {
+  text-anchor: middle; font-size: 30px; font-weight: 700;
+  fill: var(--ink); font-variant-numeric: tabular-nums;
+}
+.donut__cap { text-anchor: middle; font-size: 10px; fill: var(--ink-3); letter-spacing: 0.06em; }
+
+.legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; flex: 1; min-width: 150px; }
+.legend li { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.legend__sw { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+.legend__l { color: var(--ink-2); flex: 1; min-width: 0; }
+.legend__v { font-weight: 700; }
 
 .bars { display: grid; gap: 7px; }
 .bar__row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
 .bar__track { height: 20px; background: var(--bg-2); border-radius: 2px; overflow: hidden; }
 .bar__fill { height: 100%; background: var(--maroon); }
 .bar__fill--gold { background: var(--gold); }
+
+/* --- funnel ---------------------------------------------------------
+ * Stage name, bar, count, share - one row each, on a fixed three-column
+ * grid so the bars all start at the same x and the eye can read straight
+ * down the drop-off. The old version put the name ABOVE its bar, which
+ * doubled the height and left the numbers floating off to the right with
+ * nothing to align to.
+ */
+/* ONE grid for the whole funnel, with each row and each drop-off note using
+   `display: contents` to place its cells directly into it. A grid per row
+   would let every row size its own name column, and the bars would no longer
+   start at the same x - which is the only reason the drop-off is readable by
+   running the eye straight down. */
+.funnel { display: grid; grid-template-columns: minmax(88px, 22%) 1fr auto; gap: 6px 12px; align-items: center; }
+.funnel__row { display: contents; }
+.funnel__name { font-size: 13px; color: var(--ink-2); }
+.funnel__track { height: 26px; background: var(--bg-2); border-radius: 3px; overflow: hidden; }
+.funnel__fill { height: 100%; border-radius: 3px 0 0 3px; }
+.funnel__fill--over { border-radius: 3px; }
+.funnel__n {
+  display: flex; align-items: baseline; gap: 7px;
+  justify-content: flex-end; min-width: 74px;
+}
+.funnel__v { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+.funnel__pct { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* The gap between two stages, carrying what was lost there. This is the
+   number a programme manager actually wants; it used to require mental
+   arithmetic off two bars. */
+.funnel__drop {
+  grid-column: 2 / 3;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: var(--ink-3);
+  padding: 3px 0;
+}
+.funnel__drop::before {
+  content: '';
+  width: 1px; height: 12px; background: var(--line-2); margin-inline-start: 10px;
+}
+.funnel__drop--bad { color: var(--danger); }
 
 /* ================= responsive ================= */
 
@@ -340,3 +459,115 @@ table.t tr:last-child td { border-bottom: 0; }
   .side__foot { grid-auto-flow: column; }
   .body { padding: 16px; }
 }
+
+/* ================= confirmation ================= */
+
+.confirm {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-2);
+  border-inline-start: 3px solid var(--maroon);
+  border-radius: var(--r);
+  background: var(--surface-2);
+}
+.confirm__t { font-weight: 700; }
+.confirm__d { font-size: 13.5px; color: var(--ink-2); margin-top: 4px; max-width: 62ch; }
+
+.packbtn {
+  min-width: 38px;
+  padding: 5px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.packbtn--on { background: var(--maroon); border-color: var(--maroon); color: #fff; font-weight: 700; }
+.packbtn:focus-visible { outline: 2px solid var(--maroon-mid); outline-offset: 2px; }
+
+/* ================= landing sections ================= */
+
+.seccards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 10px;
+}
+
+.seccard {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  text-align: start;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  cursor: pointer;
+  color: inherit;
+}
+.seccard:hover { border-color: var(--maroon); background: var(--surface-2); }
+.seccard:focus-visible { outline: 2px solid var(--maroon-mid); outline-offset: 2px; }
+
+.seccard__icon {
+  flex: none;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--maroon-soft); color: var(--maroon);
+  display: grid; place-items: center; font-size: 17px;
+}
+.seccard__body { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.seccard__t { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.seccard__d { font-size: 13px; color: var(--ink-2); }
+.seccard__go { color: var(--ink-3); font-size: 18px; line-height: 1; align-self: center; flex: none; }
+.seccard:hover .seccard__go { color: var(--maroon); }
+.seccard__t .navlink__badge { margin-inline-start: 0; }
+
+/* ================= toasts =================
+ * Bottom-right, out of the way of the sidebar and the row an admin is
+ * working on. Every completed action ends with one: a row leaving a
+ * list is not the same as being told what it did.
+ */
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 90;
+  width: min(360px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border-radius: var(--r);
+  background: var(--ink);
+  color: #fff;
+  font-size: 13.5px;
+  line-height: 1.45;
+  box-shadow: 0 6px 20px rgba(59, 43, 35, 0.25);
+  pointer-events: auto;
+  animation: toast-in 160ms ease-out;
+}
+.toast__i { flex: none; font-size: 16px; display: grid; place-items: center; }
+.toast--ok .toast__i { color: #7fe0a4; }
+.toast--warn { background: var(--gold-deep); }
+.toast--danger { background: var(--danger); }
+.toast__go {
+  flex: none;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: transparent;
+  color: #fff;
+  border-radius: var(--r);
+  padding: 3px 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toast__go:hover { background: rgba(255, 255, 255, 0.16); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }

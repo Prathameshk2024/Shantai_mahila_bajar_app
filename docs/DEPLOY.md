@@ -55,7 +55,9 @@ Set these in the Render dashboard. Render injects `PORT` itself — do not set i
 | `CLOUDINARY_FOLDER` | `shanta-mahila-bazar` |
 | `CORS_ORIGIN` | Both Vercel URLs, comma-separated. See §3. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | **Change the password.** It is the only thing guarding the admin API. |
-| `MSG91_AUTH_KEY` / `MSG91_TEMPLATE_ID` / `MSG91_SENDER` | Without these any 4-digit code logs in as anyone. |
+| `MSG91_AUTH_KEY` | **Secret.** The account Auth Key, and the only thing that can check a widget token. Never copy it into a `VITE_*` variable. |
+| `MSG91_WIDGET_ID` | The OTP widget's id. With `MSG91_AUTH_KEY` this selects the widget, which needs no DLT registration. |
+| `MSG91_TEMPLATE_ID` / `MSG91_SENDER` | Only for your own DLT-approved template. Leave unset while using the widget. |
 | `SEED_DEMO_DATA` | Leave unset. Setting it would put invented sellers in front of real customers. |
 
 Generate the session secret with:
@@ -85,13 +87,22 @@ the Root Directory.
 |---|---|---|
 | Root Directory | `frontend` | `admin` |
 | Framework preset | Vite | Vite |
-| Environment variable | `VITE_API_URL=https://<your-api>.onrender.com` | same value |
+| Environment variables | `VITE_API_URL=https://<your-api>.onrender.com`<br>`VITE_MSG91_WIDGET_ID=...`<br>`VITE_MSG91_TOKEN_AUTH=...` | `VITE_API_URL` only |
 
 Vercel detects the npm workspaces and installs from the repo root, so `shared/`
 resolves normally. No extra configuration is needed.
 
-`VITE_API_URL` is read at **build** time, not run time — changing it means
-redeploying, not just restarting.
+Every `VITE_*` value is read at **build** time, not run time — changing one
+means redeploying, not just restarting. The admin console has no login OTP, so
+the MSG91 pair belongs to project 1 alone.
+
+The two MSG91 values here are public by design; the browser cannot run the
+widget without them. **`MSG91_AUTH_KEY` is not one of them** — it lives on
+Render only. Anything named `VITE_*` is inlined into the JS bundle that ships
+to every phone, so putting the auth key here would publish it.
+
+MSG91's widget settings restrict which domains may use it. Add the Vercel URL
+there, or the widget loads and then refuses to send.
 
 In development neither app needs it: `vite.config.ts` proxies `/api` to
 `localhost:4000`.
@@ -122,9 +133,13 @@ Confirm it on boot — the banner prints what is active:
 ```
   Database       Firestore (shantaimahilabajar)
   Images         Cloudinary (wvd4cteq)
-  OTP            MSG91
+  OTP            MSG91 widget (356a4b...)
   CORS           https://shanta-bazar.vercel.app, https://shanta-admin.vercel.app
 ```
+
+`OTP  demo (code shown on screen)` on a production host means the widget did
+not configure and the API should not have booted — check both `MSG91_AUTH_KEY`
+and `MSG91_WIDGET_ID` are set, since either alone falls back.
 
 ---
 
@@ -134,10 +149,15 @@ CORS needs the Vercel URLs, and Vercel needs the API URL, so it takes two
 passes:
 
 1. Deploy the API to Render. Set everything except `CORS_ORIGIN`.
-2. Deploy both Vercel projects with `VITE_API_URL` pointing at Render.
+2. Deploy both Vercel projects with `VITE_API_URL` pointing at Render, and the
+   `VITE_MSG91_*` pair on project 1.
 3. Set `CORS_ORIGIN` on Render to the two Vercel URLs. Render restarts.
-4. Deploy the Firestore rules: `firebase deploy --only firestore:rules`.
-5. Check the boot banner shows Firestore, Cloudinary, MSG91 and both origins.
+4. Add the project-1 Vercel URL to the MSG91 widget's allowed domains.
+5. Deploy the Firestore rules: `firebase deploy --only firestore:rules`.
+6. Check the boot banner shows Firestore, Cloudinary, the MSG91 widget and both
+   origins.
+7. Log in once on a real phone. The widget path is the one thing here that
+   cannot be verified from the banner alone.
 
 ---
 
@@ -145,7 +165,12 @@ passes:
 
 - [ ] `ADMIN_PASSWORD` changed from `changeme`
 - [ ] `SESSION_SECRET` set to a fresh random value
-- [ ] MSG91 configured — otherwise any 4 digits logs in as anyone
+- [ ] MSG91 configured — **the API refuses to boot in production without it**, because demo mode returns the login code in the HTTP response
+- [ ] `VITE_MSG91_WIDGET_ID` + `VITE_MSG91_TOKEN_AUTH` set on the Vercel frontend project, and the Vercel URL added to the widget's allowed domains
+- [ ] `MSG91_AUTH_KEY` appears **only** on Render, never in a `VITE_*` variable
+- [ ] The auth key committed in `.env.example` at `a0775b7` has been rotated — deleting the line did not revoke it
+- [ ] `ADMIN_BOOTSTRAP_EMAIL` + `ADMIN_BOOTSTRAP_PASSWORD_HASH` set for the first sign-in (`npm run admin:users -- hash`), then removed once a real administrator exists
+- [ ] `SESSION_SECRET` set — changing it later signs every user out
 - [ ] `CORS_ORIGIN` set to both origins
 - [ ] Render instance count is 1, autoscaling off
 - [ ] `firestore.rules` deployed

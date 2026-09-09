@@ -1,4 +1,4 @@
-# शांता महिला बाजार · Shanta Mahila Bazar
+# शांताई महिला बाजार · Shantai Mahila Bazar
 
 Digital entrepreneurship platform for rural women entrepreneurs.
 Sellers and customers use the **app**; the **admin console is a separate site**
@@ -18,7 +18,7 @@ docs/       the product specification
 ```
 
 `shared/` is the point of the TypeScript: the order state machine, slot rules,
-FSSAI/UPI validation and the Shanta Mahila Bazar ID generator are written once and imported
+FSSAI/UPI validation and the Shantai Mahila Bazar ID generator are written once and imported
 by both sides through the `@shared/*` alias. A change there is a compile error on
 whichever side has not caught up.
 
@@ -44,15 +44,15 @@ development. Data lives in `backend/data/db.json`; delete it, or
 
 | Flow | How |
 |---|---|
-| **Landing** | `http://localhost:5173/` — two doors: sell, or buy |
-| **New seller** | "मला विकायचे आहे" → any 10-digit number → **any 4 digits** as OTP → the 6-step registration wizard |
-| **Existing seller** | Log in with `9822011223` (Sunita, WB-ANADUR-001) |
+| **Landing** | `http://192.168.31.110:5173/` — two doors: sell, or buy |
+| **New seller** | "मला विकायचं आहे" → any 10-digit number → **the 6-digit code shown on screen** → the 6-step registration wizard |
+| **Existing seller** | Log in with `9822011223` (Sunita, SMB-ANADUR-01) |
 | **Customer** | "मला खरेदी करायची आहे" → any number → any 4-digit OTP |
 | **Admin** | No UI here by design. `POST /api/auth/admin/login` then call `/api/admin/*` |
 
 Worth clicking through:
 
-- **Registration wizard** — her Shanta Mahila Bazar ID appears live on step 2 as soon as
+- **Registration wizard** — her Shantai Mahila Bazar ID appears live on step 2 as soon as
   she picks a village, and her digital score on step 4 as she answers.
 - **Add Product → step 2** — press the mic and speak the product name.
 - **Add Product → step 3** — food asks 4 fields, non-food asks 1.
@@ -70,15 +70,15 @@ Worth clicking through:
 | `types.ts` | every shape that crosses the wire |
 | `orderFlow.ts` | the locked 6-state machine, and payment as a separate axis |
 | `seller.ts` | slots, plan, validation, the UPI intent-link builder |
-| `womenbiz.ts` | the Shanta Mahila Bazar ID, village codes, Devanagari transliteration |
+| `womenbiz.ts` | the Shantai Mahila Bazar ID, village codes, Devanagari transliteration |
 | `readiness.ts` | the Digital Readiness Index |
 
-### Shanta Mahila Bazar ID
+### Shantai Mahila Bazar ID
 
-Format `WB-<VILLAGE>-<NNN>`, e.g. **WB-ANADUR-001**.
+Format `SMB-<VILLAGE>-<NN>`, e.g. **SMB-ANADUR-01**.
 
-The serial is **per village**, not global, because `WB-ANADUR-007` tells a field
-coordinator which village to visit and `WB-000431` tells them nothing. The five
+The serial is **per village**, not global, because `SMB-ANADUR-07` tells a field
+coordinator which village to visit and `SMB-000431` tells them nothing. The five
 survey villages have fixed codes; any other village name is transliterated from
 Devanagari (`चिवरी → CHIVARI`, `रुद्रवाडी → RUDRAVADI`).
 
@@ -105,7 +105,7 @@ Collected in six steps. New fields taken from the project plan are marked ←.
 | Step | Fields |
 |---|---|
 | 1 · About you | name (voice), **age ←**, **education ←**, WhatsApp number ← |
-| 2 · Village | village (from the 5 survey villages, or free text), taluka, district, pincode → **generates her Shanta Mahila Bazar ID** |
+| 2 · Village | village (from the 6 supported villages, or free text), taluka, district, pincode → **generates her Shantai Mahila Bazar ID** |
 | 3 · Business | shop name (voice), business type (individual / SHG / Udyam), SHG name, **years in business ←**, **monthly capacity ←**, about (voice), sells food?, FSSAI number + expiry |
 | 4 · Digital use ← | six yes/no questions → **Digital Readiness Index** |
 | 5 · Money in | UPI ID, delivery charge, minimum order, dispatch time |
@@ -157,7 +157,7 @@ one piece on, and the boot banner tells you which are live:
 ```
   Database       Firestore (your-project)     ← or "JSON file (backend/data/db.json)"
   Images         Cloudinary (your-cloud)      ← or "off - emoji only"
-  OTP            MSG91                        ← or "demo (any 4 digits)"
+  OTP            MSG91 widget (your-id)       ← or "demo (code shown on screen)"
 ```
 
 ### Firebase
@@ -256,11 +256,45 @@ a tablet. The landing page is the one full-width surface, with breakpoints at
 
 ## Wiring up the real backend
 
-### MSG91
+### MSG91 — the OTP widget
 
-`backend/src/services/otp.service.ts` already calls the real MSG91 endpoints —
-set `MSG91_AUTH_KEY` and `MSG91_TEMPLATE_ID` and it switches from demo mode to
-live SMS. The auth key stays on the server. **Never verify an OTP on the client.**
+The widget is what this project uses, because it needs **no DLT registration**:
+the template and sender ID are MSG91's, not ours.
+
+| Where | Variable | From |
+|---|---|---|
+| `backend/.env` | `MSG91_AUTH_KEY` | account menu → API → Auth Key. **Secret.** |
+| `backend/.env` | `MSG91_WIDGET_ID` | OTP → Widget |
+| `frontend/.env` | `VITE_MSG91_WIDGET_ID` | the same widget id |
+| `frontend/.env` | `VITE_MSG91_TOKEN_AUTH` | OTP → Widget → Token Auth |
+
+Both halves are needed: with only the frontend pair the server has no key to
+check the token with, and with only the backend pair the browser cannot run the
+widget at all and the app stays on the server-side OTP path.
+
+The flow, and why it is safe even though the code is checked in the browser:
+
+```
+browser   widget sends the SMS and checks the code  →  access-token (JWT)
+browser   POST /api/auth/otp/verify { phone, code: <JWT> }
+server    POST verifyAccessToken { authkey, access-token }  →  the number
+server    that number must equal the phone in the request, or 401
+```
+
+The browser never gets to assert "she passed" — it carries a token that means
+nothing until the server re-checks it with an auth key the bundle does not
+have. The last line is the whole security of it: a token proves that *some*
+number was verified, so without comparing it to the number in the request,
+anyone could verify their own phone and then sign in as somebody else.
+See `backend/src/services/otp.providers.ts` and `frontend/src/lib/msg91Widget.ts`.
+
+`VITE_*` values are inlined into the JS bundle. **Never put `MSG91_AUTH_KEY` in
+one.**
+
+Leave all four blank and the app runs the server-side path instead: a real
+six-digit code, hashed, single-use, five-minute TTL, shown on screen rather
+than sent. Set `MSG91_TEMPLATE_ID` there instead if you ever get your own
+DLT-approved template; the widget wins when both are configured.
 
 ### Firebase (free tier)
 
@@ -287,7 +321,7 @@ the first six months of the platform's growth story does not exist.
 ```bash
 cd frontend
 npm i -D @capacitor/cli @capacitor/core
-npx cap init Shanta Mahila Bazar in.shantabazar.app --web-dir=dist
+npx cap init Shantai Mahila Bazar in.shantabazar.app --web-dir=dist
 npm run cap:add && npm run cap:sync && npm run cap:open
 ```
 

@@ -5,3 +5,5 @@ dist
 android/
 *.log
 .DS_Store
+*.tsbuildinfo
+backend/data/db.json

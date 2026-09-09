@@ -1,9 +1,12 @@
-import { Router } from 'express'
+import { Router, type Request } from 'express'
 import type { AdminStats, ReadinessBand } from '@shared/types.js'
 import { PLAN, slotInfo } from '@shared/seller.js'
+import { REJECT_GRACE_HOURS } from '@shared/moderation.js'
 import { BAND_LABEL } from '@shared/readiness.js'
 import { getDb, save } from '../db/store.js'
 import { sellerStatusAfterReject } from '../db/payments.js'
+import { appendNotice as notifySeller } from '../db/notices.js'
+import { purgeExpiredRejections } from '../db/moderation.js'
 import { requireRole } from '../middleware/auth.js'
 
 /**
@@ -26,6 +29,21 @@ export const adminRouter: Router = Router()
 
 adminRouter.use(requireRole('admin'))
 
+/**
+ * Who to record against a decision.
+ *
+ * `req.auth.userId` is now an administrator's record id, which is correct for
+ * scoping and useless on a screen. Payments are money, and "who approved
+ * this?" has to be answerable months later by someone reading the record - so
+ * the readable name is stored, and the id only if the account has since been
+ * removed. Before per-person accounts existed this said the same thing for
+ * everybody, whoever clicked it.
+ */
+function verifierName(db: ReturnType<typeof getDb>, req: Request): string {
+  const admin = db.admins.find((a) => a.id === req.auth?.userId)
+  return admin ? `${admin.name} <${admin.email}>` : (req.auth?.userId ?? 'unknown')
+}
+
 /* ------------------------------------------------------------------ */
 /* Dashboard                                                           */
 /* ------------------------------------------------------------------ */
@@ -36,7 +54,7 @@ adminRouter.get('/stats', (_req, res) => {
   const monthAgo = Date.now() - 30 * 86_400_000
 
   const delivered = db.orders.filter(
-    (o) => o.status === 'DELIVERED' || o.status === 'COMPLETED',
+    (o) => o.status === 'DELIVERED',
   )
   const deliveredAt = (o: (typeof delivered)[number]) =>
     o.events.find((e) => e.to === 'DELIVERED')?.at
@@ -97,14 +115,18 @@ adminRouter.get('/stats', (_req, res) => {
       (s) => Date.now() - new Date(s.createdAt).getTime() < 7 * 86_400_000,
     ).length,
     pendingPayments: db.payments.filter((p) => p.status === 'PENDING').length,
-    pendingProducts: db.products.filter((p) => p.status === 'PENDING').length,
     stuckOrders: stuck.length,
     openDisputes: 0,
     womenEarnedTotal: earnedTotal,
     womenEarnedMonth: earnedMonth,
     // The most truthful single measure of whether the platform works.
     womenWithFirstEarning: sellersWithEarnings.size,
-    subscriptionRevenue: approvedPayments.length * PLAN.price,
+    // Summed from the approved records, not `count * PLAN.price`. The plan
+    // price is what we charge TODAY: multiplying by it restates every payment
+    // ever taken at today's price, so the day the ₹50 changes, last year's
+    // income silently changes with it. A payment stores what was actually paid.
+    subscriptionRevenue: approvedPayments.reduce((n, p) => n + (Number(p.amount) || 0), 0),
+    approvedPaymentCount: approvedPayments.length,
     repurchaseRate: db.sellers.length ? repurchasers / db.sellers.length : 0,
     funnel: [
       { mr: 'नोंदणी केली', en: 'Registered', v: db.sellers.length },
@@ -147,23 +169,27 @@ adminRouter.post('/payments/:id/approve', (req, res) => {
   const db = getDb()
   const payment = db.payments.find((p) => p.id === req.params.id)
   if (!payment) {
-    res.status(404).json({ error: 'Payment not found' })
+    res.status(404).json({ error: 'Payment not found', messageMr: 'हा भरणा सापडला नाही' })
     return
   }
   if (payment.status !== 'PENDING') {
-    res.status(409).json({ error: `Already ${payment.status}` })
+    res.status(409).json({
+      error: `Already ${payment.status}`,
+      messageMr: 'यावर आधीच निर्णय झाला आहे',
+    })
     return
   }
 
   payment.status = 'APPROVED'
   payment.verifiedAt = new Date().toISOString()
-  payment.verifiedBy = req.auth!.userId
+  payment.verifiedBy = verifierName(db, req)
 
   // Approving grants exactly one pack and flips her to ACTIVE.
   const seller = db.sellers.find((s) => s.id === payment.sellerId)
   if (seller) {
     seller.packsApproved += 1
     seller.status = 'ACTIVE'
+    notifySeller(seller, 'PAYMENT_APPROVED', { n: PLAN.slotsPerPack })
   }
   save()
 
@@ -176,18 +202,21 @@ adminRouter.post('/payments/:id/reject', (req, res) => {
   const db = getDb()
   const payment = db.payments.find((p) => p.id === req.params.id)
   if (!payment) {
-    res.status(404).json({ error: 'Payment not found' })
+    res.status(404).json({ error: 'Payment not found', messageMr: 'हा भरणा सापडला नाही' })
     return
   }
   payment.status = 'REJECTED'
   payment.rejectReason = String(req.body?.reason ?? 'UTR did not match the bank statement')
   payment.verifiedAt = new Date().toISOString()
-  payment.verifiedBy = req.auth!.userId
+  payment.verifiedBy = verifierName(db, req)
 
   // Not unconditionally PAYMENT_REJECTED: clearing a duplicate submission off
   // the queue must not revoke an account another payment already paid for.
   const seller = db.sellers.find((s) => s.id === payment.sellerId)
-  if (seller) seller.status = sellerStatusAfterReject(seller, db.payments, payment.id)
+  if (seller) {
+    seller.status = sellerStatusAfterReject(seller, db.payments, payment.id)
+    notifySeller(seller, 'PAYMENT_REJECTED', { note: payment.rejectReason })
+  }
   save()
   res.json({ payment })
 })
@@ -197,13 +226,57 @@ adminRouter.post('/sellers/:id/grant-slots', (req, res) => {
   const db = getDb()
   const seller = db.sellers.find((s) => s.id === req.params.id)
   if (!seller) {
-    res.status(404).json({ error: 'Seller not found' })
+    res.status(404).json({ error: 'Seller not found', messageMr: 'ही विक्रेती सापडली नाही' })
     return
   }
-  seller.packsApproved += Math.max(1, Number(req.body?.packs ?? 1))
+  const granted = Math.max(1, Number(req.body?.packs ?? 1))
+  seller.packsApproved += granted
   if (seller.status === 'REGISTERED' || seller.status === 'PAYMENT_SUBMITTED') {
     seller.status = 'ACTIVE'
   }
+  // In slots, not packs. A pack is our unit; what she counts is the number of
+  // products she can now put up.
+  notifySeller(seller, 'SLOTS_GRANTED', { n: granted * PLAN.slotsPerPack })
+  save()
+  res.json({ seller })
+})
+
+/**
+ * Take slot packs back.
+ *
+ * The counterpart to grant-slots, for a pack granted in error. It refuses to
+ * drop her allowance below what she is already using: silently un-publishing
+ * products she has live is not something an admin should be able to do by
+ * mistyping a number.
+ */
+adminRouter.post('/sellers/:id/revoke-slots', (req, res) => {
+  const db = getDb()
+  const seller = db.sellers.find((s) => s.id === req.params.id)
+  if (!seller) {
+    res.status(404).json({ error: 'Seller not found', messageMr: 'ही विक्रेती सापडली नाही' })
+    return
+  }
+
+  const packs = Math.max(1, Number(req.body?.packs ?? 1))
+  const used = db.products.filter(
+    (p) => p.sellerId === seller.id && p.status !== 'ARCHIVED',
+  ).length
+  const remaining = Math.max(0, seller.packsApproved - packs)
+
+  if (remaining * PLAN.slotsPerPack < used) {
+    res.status(409).json({
+      error: `She is using ${used} slots; that would leave ${remaining * PLAN.slotsPerPack}`,
+      messageMr: `ती सध्या ${used} जागा वापरत आहे. इतक्या जागा काढता येणार नाहीत.`,
+    })
+    return
+  }
+
+  seller.packsApproved = remaining
+  // No packs left means she cannot sell, so the status has to say so - leaving
+  // her ACTIVE with zero slots would look like a broken account to her.
+  if (remaining === 0 && seller.status === 'ACTIVE') seller.status = 'REGISTERED'
+  notifySeller(seller, 'SLOTS_REVOKED', { n: packs * PLAN.slotsPerPack })
+
   save()
   res.json({ seller })
 })
@@ -214,6 +287,9 @@ adminRouter.post('/sellers/:id/grant-slots', (req, res) => {
 
 adminRouter.get('/products', (req, res) => {
   const db = getDb()
+  // Swept here too, not only on the hourly timer: the list an admin reads must
+  // not offer a row the next request would refuse to act on.
+  if (purgeExpiredRejections(db.products)) save()
   const status = (req.query.status as string) ?? 'PENDING'
   const list = db.products
     .filter((p) => (status === 'ALL' ? true : p.status === status))
@@ -225,24 +301,56 @@ adminRouter.post('/products/:id/moderate', (req, res) => {
   const db = getDb()
   const product = db.products.find((p) => p.id === req.params.id)
   if (!product) {
-    res.status(404).json({ error: 'Product not found' })
+    res.status(404).json({ error: 'Product not found', messageMr: 'हे उत्पादन सापडले नाही' })
     return
   }
 
   const approve = !!req.body?.approve
+  const reason = String(req.body?.reason ?? '').trim()
 
-  // A food listing without a valid FSSAI number cannot go live. The platform
-  // is legally required to display one, so this is a hard block, not advice.
-  if (approve && product.isFood && !product.fssai) {
+  /**
+   * A rejection needs a reason, and the server is where that is true.
+   *
+   * She reads it in her own app, and it is the only thing standing between
+   * "your papad listing was refused because the photo is too dark" and a
+   * product that vanishes for no stated cause. The console asks for one; this
+   * is what makes the console's rule real rather than polite.
+   */
+  if (!approve && !reason) {
+    res.status(400).json({
+      error: 'A rejection needs a reason - she reads it in her own app',
+      messageMr: 'नाकारण्याचे कारण लिहा',
+      fields: { reason: 'required' },
+    })
+    return
+  }
+
+  // Rejecting the same product twice would restart its 48 hours, which is how
+  // a listing stays in limbo forever. Say so instead.
+  if (!approve && product.status === 'REJECTED') {
     res.status(409).json({
-      error: 'Food listing has no FSSAI number',
-      messageMr: 'FSSAI क्रमांकाशिवाय खाद्यपदार्थ प्रकाशित करता येणार नाही',
+      error: 'Already rejected',
+      messageMr: 'हे उत्पादन आधीच नाकारले आहे',
     })
     return
   }
 
   product.status = approve ? 'LIVE' : 'REJECTED'
-  product.rejectReason = approve ? undefined : String(req.body?.reason ?? '')
+  product.rejectReason = approve ? undefined : reason
+  // The clock the automatic removal runs on. Cleared on approval, so a product
+  // rejected once and then approved is not carrying a deadline any more.
+  product.rejectedAt = approve ? undefined : new Date().toISOString()
+
+  // She is told about her own product by name: "which one?" is the first thing
+  // she asks, and the id on the row means nothing to her. A rejection also
+  // carries the number of hours before it disappears.
+  const owner = db.sellers.find((s) => s.id === product.sellerId)
+  if (owner) {
+    notifySeller(owner, approve ? 'PRODUCT_APPROVED' : 'PRODUCT_REJECTED', {
+      note: approve ? product.name : `${product.name} - ${reason}`,
+      n: approve ? undefined : REJECT_GRACE_HOURS,
+    })
+  }
   save()
   res.json({ product })
 })
@@ -287,10 +395,24 @@ adminRouter.post('/sellers/:id/block', (req, res) => {
   const db = getDb()
   const seller = db.sellers.find((s) => s.id === req.params.id)
   if (!seller) {
-    res.status(404).json({ error: 'Seller not found' })
+    res.status(404).json({ error: 'Seller not found', messageMr: 'ही विक्रेती सापडली नाही' })
     return
   }
-  seller.status = req.body?.blocked ? 'BLOCKED' : 'ACTIVE'
+  const blocked = !!req.body?.blocked
+  seller.status = blocked ? 'BLOCKED' : 'ACTIVE'
+
+  if (blocked) {
+    // Stamped so her own screens can tell her she has been blocked, and why.
+    // Being silently unable to sell is the worst version of this.
+    seller.blockedAt = new Date().toISOString()
+    seller.blockReason = String(req.body?.reason ?? '').trim() || undefined
+    notifySeller(seller, 'BLOCKED', { note: seller.blockReason })
+  } else {
+    seller.blockedAt = undefined
+    seller.blockReason = undefined
+    notifySeller(seller, 'UNBLOCKED')
+  }
+
   save()
   res.json({ seller })
 })
@@ -303,7 +425,7 @@ adminRouter.post('/sellers/:id/block', (req, res) => {
 adminRouter.get('/impact', (_req, res) => {
   const db = getDb()
   const delivered = db.orders.filter(
-    (o) => o.status === 'DELIVERED' || o.status === 'COMPLETED',
+    (o) => o.status === 'DELIVERED',
   )
 
   const byVillage = new Map<string, { village: string; women: number; earned: number }>()

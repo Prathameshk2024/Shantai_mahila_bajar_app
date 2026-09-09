@@ -32,6 +32,43 @@ export function setToken(token: string | null): void {
   }
 }
 
+/**
+ * TWO THINGS THE SESSION HAS TO TELL THE APP
+ * ==========================================
+ * `wb.token` is what this module sends; `wb.session` (in AuthContext) is what
+ * survives a reload and decides which screens render. They have to agree, and
+ * for a long time they did not:
+ *
+ *  - the server slides the idle window by handing back a fresh token on
+ *    `X-Session-Token`. That landed in `wb.token` only. On the next reload
+ *    AuthContext wrote the ORIGINAL token back over it, so the window never
+ *    actually slid and a seller was signed out exactly seven days after login
+ *    however much she had used the app in between;
+ *  - a 401 cleared `wb.token` and left `wb.session` sitting there, so the UI
+ *    still believed she was signed in while every request failed.
+ *
+ * So the two events that change a session are published here, and AuthContext
+ * is the one place that acts on them. Nothing else clears a session - not a
+ * back press, not a reload, not opening /seller again.
+ */
+type TokenListener = (token: string) => void
+type ExpiryListener = () => void
+
+const refreshListeners = new Set<TokenListener>()
+const expiryListeners = new Set<ExpiryListener>()
+
+/** The server re-stamped the session. Returns an unsubscribe. */
+export function onTokenRefresh(fn: TokenListener): () => void {
+  refreshListeners.add(fn)
+  return () => refreshListeners.delete(fn)
+}
+
+/** The server rejected the token: it is genuinely dead. Returns an unsubscribe. */
+export function onSessionExpired(fn: ExpiryListener): () => void {
+  expiryListeners.add(fn)
+  return () => expiryListeners.delete(fn)
+}
+
 /** Thrown for any non-2xx. Carries the Marathi message and per-field errors. */
 export class ApiError extends Error {
   status: number
@@ -57,6 +94,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   })
 
+  // The server slides the session forward: past halfway through the idle
+  // window it hands back a freshly stamped token. Swapping it in here is what
+  // stops an active user being signed out on a timer.
+  const refreshed = res.headers.get('X-Session-Token')
+  if (refreshed && refreshed !== token) {
+    setToken(refreshed)
+    for (const fn of refreshListeners) fn(refreshed)
+  }
+
   const text = await res.text()
 
   let body: Record<string, unknown> = {}
@@ -73,6 +119,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         messageMr: 'सर्व्हरशी संपर्क होत नाही. थोड्या वेळाने पुन्हा प्रयत्न करा.',
       })
     }
+  }
+
+  // 401 means the SERVER rejected this token - expired, or signed with a
+  // different secret. `requireRole` answers 403 for the wrong role, so this is
+  // never "not allowed here"; it is "there is no session any more". Telling
+  // AuthContext is the only way she gets back to the phone screen instead of
+  // tapping a shop that answers 401 to everything.
+  if (res.status === 401 && token) {
+    setToken(null)
+    for (const fn of expiryListeners) fn()
   }
 
   if (!res.ok) throw new ApiError(res.status, body)
@@ -94,10 +150,49 @@ export const api = {
   sendOtp: (phone: string) =>
     post<{ sent: boolean; demoCode?: string; cooldownMs?: number }>('/auth/otp/send', { phone }),
 
+  /**
+   * `registered` and `session` are independent on purpose. A customer whose
+   * OTP checked out is authenticated - she gets a session - but she is not
+   * registered until she has given us a name, so both come back together and
+   * the caller decides where she lands. A seller with no record gets
+   * `registered: false` and no session, because there is nothing to sign in to
+   * until the wizard has run.
+   */
   verifyOtp: (phone: string, code: string, role: 'seller' | 'customer') =>
-    post<{ registered: boolean; session?: Session; phone?: string }>('/auth/otp/verify', {
-      phone, code, role,
-    }),
+    post<{
+      registered: boolean
+      session?: Session
+      phone?: string
+      /**
+       * Single-use proof that this phone just passed an OTP. Present only for
+       * a seller with no record yet, and required by `registerSeller` - the
+       * server reads the phone out of it and ignores the one in the body.
+       */
+      ticket?: string
+    }>('/auth/otp/verify', { phone, code, role }),
+
+  /**
+   * End the session on the SERVER, not just in this browser.
+   *
+   * Logging out used to clear localStorage and nothing else, which left the
+   * token valid for its whole window - so signing out on a borrowed phone did
+   * not sign you out of anything.
+   */
+  logout: () => post<{ ok: true }>('/auth/logout'),
+
+  /** Devices this account is signed in on. Never anybody else's. */
+  sessions: () =>
+    get<{
+      sessions: {
+        id: string
+        client?: string
+        createdAt: string
+        lastSeenAt: string
+        current: boolean
+      }[]
+    }>('/auth/sessions'),
+
+  endSession: (id: string) => del<{ ok: true }>(`/auth/sessions/${id}`),
 
   /* ---------------- seller ---------------- */
 
@@ -112,7 +207,6 @@ export const api = {
   /** Her buyers, derived from her own orders. Never anybody else's. */
   myBuyers: () => get<{ buyers: SellerBuyer[] }>('/sellers/me/buyers'),
 
-  sellerBySlug: (slug: string) => get<{ seller: Seller }>(`/sellers/slug/${slug}`),
   sellerById: (id: string) => get<{ seller: Seller }>(`/sellers/${id}`),
 
   subscription: () =>
@@ -231,7 +325,12 @@ export interface AddressInput {
 }
 
 export interface SellerRegistration {
-  phone: string
+  /**
+   * From `verifyOtp`. The server takes the phone number from THIS and ignores
+   * anything the body claims, so registration cannot be pointed at a number
+   * whose OTP was never passed.
+   */
+  ticket: string
   name: string
   age?: number
   education?: string
@@ -247,9 +346,9 @@ export interface SellerRegistration {
   yearsInBusiness?: number
   monthlyCapacity?: number
   sellsFood: boolean
-  fssai?: string
-  fssaiExpiry?: string
   upiId: string
+  upiQrUrl?: string
+  upiQrPublicId?: string
   digital: DigitalProfile
   deliveryFee?: number
   minOrder?: number

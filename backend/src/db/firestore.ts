@@ -34,7 +34,13 @@ import type { Db } from './seed.js'
  * stops the collection being read or diffed - the existing documents are left
  * in Firestore untouched, so restoring this entry is the whole rollback.
  */
-const COLLECTIONS = ['sellers', 'products', 'orders', 'payments', 'customers'] as const
+const COLLECTIONS = [
+  'sellers', 'products', 'orders', 'payments', 'customers',
+  // Auth state. `firestore.rules` already denies every client-SDK read, which
+  // matters more for these three than for anything else in the list: `admins`
+  // holds password hashes and `sessions` holds live credentials.
+  'sessions', 'admins', 'authEvents',
+] as const
 type CollectionName = (typeof COLLECTIONS)[number]
 
 let db: Firestore | null = null

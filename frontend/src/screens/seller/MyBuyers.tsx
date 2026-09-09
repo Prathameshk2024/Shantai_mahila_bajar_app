@@ -1,9 +1,11 @@
 import { useT } from '../../i18n/I18nProvider.js'
 import { api } from '../../lib/api.js'
+import { Avatar } from '../../components/Avatar.js'
 import type { SellerBuyer } from '../../lib/api.js'
 import {
   AppBar, Card, EmptyState, Loading, Pill, Rupees, SectionTitle, useAsync,
 } from '../../components/ui.js'
+import { IconBuyers, IconCall } from '../../components/icons.js'
 
 /**
  * Who buys from her.
@@ -30,7 +32,7 @@ export function MyBuyers() {
       <AppBar title={t('buy.title')} backTo="/seller" />
       <div className="screen stack">
         {buyers.length === 0 ? (
-          <EmptyState icon="👥" title={t('buy.none')} body={t('buy.noneSub')} />
+          <EmptyState icon={IconBuyers} title={t('buy.none')} body={t('buy.noneSub')} />
         ) : (
           <>
             <SectionTitle>
@@ -48,7 +50,7 @@ function BuyerCard({ buyer, t }: { buyer: SellerBuyer; t: (k: string) => string 
   return (
     <Card>
       <div className="row">
-        <div className="tile__img" aria-hidden="true" style={{ width: 44, height: 44 }}>👩</div>
+        <Avatar name={buyer.name} size={44} />
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 700 }}>{buyer.name}</div>
           <div className="small dim num">+91 {buyer.phone}</div>
@@ -73,7 +75,7 @@ function BuyerCard({ buyer, t }: { buyer: SellerBuyer; t: (k: string) => string 
       <div className="small dim">{buyer.lastAddress} - {buyer.pincode}</div>
 
       <a className="btn btn--ghost btn--sm" href={`tel:${buyer.phone}`} style={{ marginTop: 8 }}>
-        📞 {t('buy.call')}
+        <IconCall aria-hidden="true" /> {t('buy.call')}
       </a>
     </Card>
   )

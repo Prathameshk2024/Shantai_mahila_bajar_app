@@ -37,7 +37,7 @@ catalogRouter.get('/products', (req, res) => {
     )
   }
 
-  // Attach the seller card each listing needs, plus the FSSAI number, which
+  // Attach the seller card each listing needs, which
   // the law requires to be displayed on every food listing.
   const withSeller = list.map((p) => {
     const s = db.sellers.find((x) => x.id === p.sellerId)
@@ -62,7 +62,10 @@ catalogRouter.get('/products', (req, res) => {
         pincodes: s.pincodes,
         upiId: s.upiId,
         upiQrReady: s.upiQrReady,
-        fssai: s.fssai,
+        // The image she uploaded, so checkout can show HER bank's QR rather
+        // than one this app drew. Public on purpose: it is the thing a buyer
+        // has to scan to pay her.
+        upiQrUrl: s.upiQrUrl,
       },
     }
   })
@@ -73,11 +76,16 @@ catalogRouter.get('/products', (req, res) => {
 catalogRouter.get('/products/:id', (req, res) => {
   const db = getDb()
   const product = db.products.find((p) => p.id === req.params.id)
-  if (!product) {
-    res.status(404).json({ error: 'Product not found' })
+  const seller = product && db.sellers.find((s) => s.id === product.sellerId)
+
+  // A listing is public only when it is LIVE and its seller is approved and
+  // open. Without both checks a pending or rejected product - and the seller
+  // behind it - was readable by anyone holding the id.
+  if (!product || product.status !== 'LIVE' || !seller || seller.status !== 'ACTIVE' || !seller.isOpen) {
+    res.status(404).json({ error: 'Product not found', messageMr: 'हे उत्पादन सापडले नाही' })
     return
   }
-  const seller = db.sellers.find((s) => s.id === product.sellerId)
+
   res.json({ product, seller })
 })
 

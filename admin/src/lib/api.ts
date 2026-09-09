@@ -72,6 +72,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     })
   }
 
+  // The server slides the session forward: past halfway through the idle
+  // window it hands back a freshly stamped token. Swapping it in here is what
+  // stops an active user being signed out on a timer.
+  const refreshed = res.headers.get('X-Session-Token')
+  if (refreshed) setToken(refreshed)
+
   const text = await res.text()
   let body: Record<string, unknown> = {}
   if (text) {
@@ -84,6 +90,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         error: `API did not respond (HTTP ${res.status})`,
         messageMr: 'सर्व्हरकडून उत्तर आले नाही',
       })
+    }
+  }
+
+  // An expired or revoked session: drop the stored credentials so the next
+  // render shows the sign-in screen instead of a shell full of failed panels.
+  // Sessions expire on inactivity now, so this is a normal end, not an error.
+  if (res.status === 401) {
+    setToken(null)
+    try {
+      localStorage.removeItem('wb.admin.session')
+    } catch {
+      /* nothing to clean up */
     }
   }
 
@@ -102,8 +120,10 @@ const post = <T,>(p: string, body?: unknown) =>
 export interface AdminSession {
   token: string
   role: 'admin'
+  /** The administrator's record id. What `verifiedBy` on a payment points at. */
   userId: string
   name: string
+  email: string
 }
 
 export type PaymentRow = SubscriptionPayment & { waitingHours: number }
@@ -133,6 +153,15 @@ export const api = {
   signIn: (email: string, password: string) =>
     post<{ session: AdminSession }>('/auth/admin/login', { email, password }),
 
+  /**
+   * End the session on the server.
+   *
+   * An admin token approves payments and can read every buyer's home address,
+   * and it is used on shared desks. Clearing localStorage alone left it valid
+   * for the rest of its window.
+   */
+  logout: () => post<{ ok: true }>('/auth/logout'),
+
   stats: () =>
     get<{ stats: AdminStats; bandLabels: Record<string, unknown> }>('/admin/stats'),
 
@@ -158,8 +187,14 @@ export const api = {
   grantSlots: (id: string, packs: number) =>
     post<{ seller: Seller }>(`/admin/sellers/${id}/grant-slots`, { packs }),
 
-  blockSeller: (id: string, blocked: boolean) =>
-    post<{ seller: Seller }>(`/admin/sellers/${id}/block`, { blocked }),
+  /** Takes packs back. Refused by the server if it would drop her below the
+   *  slots she is already using. */
+  revokeSlots: (id: string, packs: number) =>
+    post<{ seller: Seller }>(`/admin/sellers/${id}/revoke-slots`, { packs }),
+
+  /** The reason is shown to her in her own app, so it is not optional noise. */
+  blockSeller: (id: string, blocked: boolean, reason?: string) =>
+    post<{ seller: Seller }>(`/admin/sellers/${id}/block`, { blocked, reason }),
 
   orders: (params: { status?: string; sellerId?: string; pincode?: string } = {}) => {
     const qs = new URLSearchParams()

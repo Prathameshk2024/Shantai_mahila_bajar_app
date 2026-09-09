@@ -41,7 +41,19 @@ ordersRouter.get('/:id', requireRole('seller', 'customer'), (req, res) => {
     return
   }
 
-  // The seller's phone stays masked until she accepts, and vice versa.
+  /**
+   * HER NUMBER, TO THE PERSON WHO ORDERED FROM HER - AND NOBODY ELSE.
+   *
+   * It is not on any public seller endpoint (`publicView` strips it), so
+   * browsing the catalogue never exposes it. It IS on the order, from the
+   * moment the order exists: a buyer who has paid by UPI and is waiting for
+   * food needs to be able to ring the woman making it, and this route already
+   * refuses anyone who is not one of the two parties, three lines up.
+   *
+   * It used to be withheld until she ACCEPTED, which is exactly backwards -
+   * the gap between placing and accepting is the window in which a buyer most
+   * needs to reach her.
+   */
   const seller = db.sellers.find((s) => s.id === order.sellerId)
   res.json({
     order,
@@ -53,7 +65,7 @@ ordersRouter.get('/:id', requireRole('seller', 'customer'), (req, res) => {
       shopName: seller.shopName,
       shopSlug: seller.shopSlug,
       upiId: seller.upiId,
-      phone: order.status === 'PLACED' ? undefined : seller.phone,
+      phone: seller.phone,
     },
   })
 })

@@ -35,7 +35,6 @@ export type OrderStatus =
   | 'PACKED'
   | 'OUT_FOR_DELIVERY'
   | 'DELIVERED'
-  | 'COMPLETED'
   | 'REJECTED'
   | 'CANCELLED'
 
@@ -119,9 +118,39 @@ export interface DigitalProfile {
   digitalMarketing: boolean
 }
 
+/**
+ * SOMETHING AN ADMIN DID TO HER ACCOUNT.
+ *
+ * Every other line in her updates list is derived from an order, because the
+ * order already records what happened and when. An admin decision leaves no
+ * such trail: a granted pack is a number that is simply larger than it was, so
+ * "you were given 5 more slots, on Tuesday" cannot be reconstructed after the
+ * fact. This is the smallest thing that can be: an append-only list on her own
+ * record, trimmed, written by the same handler that made the change.
+ */
+export type AdminNoticeKind =
+  | 'SLOTS_GRANTED'
+  | 'SLOTS_REVOKED'
+  | 'PAYMENT_APPROVED'
+  | 'PAYMENT_REJECTED'
+  | 'BLOCKED'
+  | 'UNBLOCKED'
+  | 'PRODUCT_APPROVED'
+  | 'PRODUCT_REJECTED'
+
+export interface AdminNotice {
+  id: string
+  at: string
+  kind: AdminNoticeKind
+  /** Slots, where the sentence carries a number. Slots, not packs - a pack is our word. */
+  n?: number
+  /** A reason, or the product's name. Shown to her as written, so keep it plain. */
+  note?: string
+}
+
 export interface Seller {
   id: string
-  /** Shanta Mahila Bazar ID, e.g. WB-ANADUR-001. Printed on packaging and posters. */
+  /** Shanta Mahila Bazar ID, e.g. SMB-ANADUR-001. Printed on packaging and posters. */
   womenBizId: string
 
   // personal
@@ -149,8 +178,6 @@ export interface Seller {
   /** Units she can make per month. Drives what admin can realistically promise. */
   monthlyCapacity?: number
   sellsFood: boolean
-  fssai?: string
-  fssaiExpiry?: string
 
   // money in. `upiId` is collected at registration because she cannot be paid
   // without it. The payment QR is a SEPARATE, later step: it is generated from
@@ -159,6 +186,7 @@ export interface Seller {
   upiId: string
   upiVerified: boolean
   upiQrUrl?: string
+  upiQrPublicId?: string
   upiQrReady?: boolean
 
   // digital readiness
@@ -176,7 +204,16 @@ export interface Seller {
 
   // platform
   status: SellerStatus
+  /**
+   * When an admin blocked her, and why. Her own screens read these to tell
+   * her what happened - a blocked seller who is simply shown an empty shop
+   * has no idea whether the app is broken or she has been removed.
+   */
+  blockedAt?: string
+  blockReason?: string
   packsApproved: number
+  /** Admin decisions about her account, newest last. Trimmed on write. */
+  notices?: AdminNotice[]
   rating: number
   ratingCount: number
   qrScans: number
@@ -215,8 +252,6 @@ export interface Product {
   isFood: boolean
 
   // food only - all four are required when isFood is true
-  fssai?: string
-  fssaiExpiry?: string
   ingredients?: string
   vegType?: 'veg' | 'nonveg'
 
@@ -231,6 +266,12 @@ export interface Product {
 
   status: ProductStatus
   rejectReason?: string
+  /**
+   * When an admin rejected it. A rejected listing is removed automatically
+   * 48 hours later (see shared/src/moderation.ts) - the stamp is what that
+   * clock counts from, and what her app counts down to.
+   */
+  rejectedAt?: string
   views: number
   createdAt: string
 }
@@ -368,13 +409,15 @@ export interface AdminStats {
   totalSellers: number
   newRegistrations: number
   pendingPayments: number
-  pendingProducts: number
   stuckOrders: number
   openDisputes: number
   womenEarnedTotal: number
   womenEarnedMonth: number
   womenWithFirstEarning: number
+  /** Summed from APPROVED payment records, never from the plan price times a count. */
   subscriptionRevenue: number
+  /** How many payments that total is made of. */
+  approvedPaymentCount: number
   repurchaseRate: number
   funnel: { mr: string; en: string; v: number }[]
   earningBands: { label: string; v: number }[]

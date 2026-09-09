@@ -3,14 +3,17 @@ import { useNavigate, useParams } from 'react-router-dom'
 import type { Product, Seller } from '@shared/types.js'
 import { useI18n, useT } from '../../i18n/I18nProvider.js'
 import { useCart } from '../../store/CartContext.js'
-import { usePincode } from '../../store/PincodeContext.js'
-import PincodeBar from '../../components/PincodeBar.js'
 import ProductImage from '../../components/ProductImage.js'
+import { Avatar } from '../../components/Avatar.js'
 import { api } from '../../lib/api.js'
 import {
   AppBar, Button, Card, EmptyState, Loading, Notice, Pill,
   Rupees, SectionTitle, Stepper, TextInput, useAsync,
 } from '../../components/ui.js'
+import {
+  IconCart, IconCheck, IconProduct, IconSearch, IconStar,
+} from '../../components/icons.js'
+import { PageTour } from '../../components/Walkthrough.js'
 
 function ProductCard({ product, onOpen }: { product: Product; onOpen: () => void }) {
   return (
@@ -28,15 +31,14 @@ export function Explore() {
   const t = useT()
   const nav = useNavigate()
   const { lang } = useI18n()
-  const { pincode } = usePincode()
   const [q, setQ] = useState('')
 
-  // The catalog is filtered by her pincode, so what she sees is only what can
-  // actually reach her. Re-runs whenever she changes it.
-  const [data, loading] = useAsync(
-    () => api.catalog(pincode ? { pincode } : {}),
-    [pincode],
-  )
+  // Deliberately NOT filtered by pincode. Browsing is for discovery, and a
+  // pincode filter here hid whole shops behind a setting most shoppers never
+  // touched. Serviceability is checked where it actually matters - at
+  // checkout, and per seller, where it can be explained rather than silently
+  // shortening the list.
+  const [data, loading] = useAsync(() => api.catalog(), [])
   const [catData] = useAsync(() => api.categories(), [])
 
   const products = data?.products ?? []
@@ -48,16 +50,15 @@ export function Explore() {
     <>
       <AppBar title={t('app.name')} sub={t('app.tagline')} />
       <div className="screen stack">
-        <PincodeBar />
-
         <TextInput
+          data-wt="ex-search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={`🔍 ${t('cus.searchPlaceholder')}`}
           aria-label={t('common.search')}
         />
 
-        <div className="hscroll">
+        <div className="hscroll" data-wt="ex-cats">
           {(catData?.categories ?? []).slice(0, 8).map((c) => (
             <button
               key={c.id}
@@ -73,12 +74,12 @@ export function Explore() {
           ))}
         </div>
 
-        <div>
+        <div data-wt="ex-grid">
           <SectionTitle>{q ? t('common.search') : t('cus.homemade')}</SectionTitle>
           {loading ? (
             <Loading />
           ) : list.length === 0 ? (
-            <EmptyState icon="🔍" title={t('prod.noProducts')} />
+            <EmptyState icon={IconSearch} title={t('prod.noProducts')} />
           ) : (
             <div className="pgrid">
               {list.map((p) => (
@@ -88,6 +89,8 @@ export function Explore() {
           )}
         </div>
       </div>
+
+      <PageTour id="shop.explore" />
     </>
   )
 }
@@ -101,7 +104,7 @@ export function Categories() {
   return (
     <>
       <AppBar title={t('nav.categories')} />
-      <div className="screen">
+      <div className="screen" data-wt="cat-grid">
         {loading ? (
           <Loading />
         ) : (
@@ -120,6 +123,8 @@ export function Categories() {
           </div>
         )}
       </div>
+
+      <PageTour id="shop.categories" />
     </>
   )
 }
@@ -130,11 +135,7 @@ export function CategoryProducts() {
   const nav = useNavigate()
   const { lang } = useI18n()
 
-  const { pincode } = usePincode()
-  const [data, loading] = useAsync(
-    () => api.catalog({ categoryId, ...(pincode ? { pincode } : {}) }),
-    [categoryId, pincode],
-  )
+  const [data, loading] = useAsync(() => api.catalog({ categoryId }), [categoryId])
   const [catData] = useAsync(() => api.categories(), [])
   const cat = (catData?.categories ?? []).find((c) => c.id === categoryId)
   const products = data?.products ?? []
@@ -149,7 +150,7 @@ export function CategoryProducts() {
         {loading ? (
           <Loading />
         ) : products.length === 0 ? (
-          <EmptyState icon="📭" title={t('prod.noProducts')} />
+          <EmptyState icon={IconProduct} title={t('prod.noProducts')} />
         ) : (
           <div className="pgrid">
             {products.map((p) => (
@@ -219,7 +220,6 @@ export function ProductDetail() {
 
         {seller && <SellerCard seller={seller} />}
 
-        {/* The FSSAI number on a food listing is a legal requirement. */}
         {product.isFood ? (
           <Card>
             <div className="stack-sm small">
@@ -227,12 +227,6 @@ export function ProductDetail() {
                 <span className="dim">{t('cus.ingredients')}: </span>
                 {product.ingredients}
               </div>
-              {(product.fssai ?? seller?.fssai) && (
-                <div>
-                  <span className="dim">{t('cus.fssaiNo')}: </span>
-                  <span className="num">{product.fssai ?? seller?.fssai}</span>
-                </div>
-              )}
             </div>
           </Card>
         ) : (
@@ -249,7 +243,7 @@ export function ProductDetail() {
         {seller && (
           <Notice tone="info">
             {t('cus.deliveryFee')}: <Rupees value={seller.deliveryFee} />
-            {seller.freeDeliveryAbove > 0 && <> · ₹{seller.freeDeliveryAbove}+ मोफत</>}
+            {seller.freeDeliveryAbove > 0 && <> · ₹{seller.freeDeliveryAbove}+ {t('cart.free')}</>}
           </Notice>
         )}
       </div>
@@ -265,158 +259,33 @@ export function ProductDetail() {
           disabled={outOfStock}
           onClick={() => { add(product, qty); nav('/shop/cart') }}
         >
-          {outOfStock ? t('prod.outOfStock') : `🧺 ${t('cus.addToCart')}`}
-          {has(product.id) ? ' ✓' : ''}
+          {outOfStock ? t('prod.outOfStock') : <><IconCart aria-hidden="true" /> {t('cus.addToCart')}</>}
+          {has(product.id) && <IconCheck aria-hidden="true" />}
         </Button>
       </div>
     </>
   )
 }
 
+/**
+ * Who made this. Not a link any more - the public storefront it opened was
+ * the landing page for the share QR, and that whole surface is gone. Her name,
+ * her village and her SMB ID still belong on the product, because they are
+ * what a buyer is choosing between.
+ */
 function SellerCard({ seller }: { seller: Partial<Seller> }) {
   const t = useT()
-  const nav = useNavigate()
   return (
-    <button className="tile" onClick={() => nav(`/shop/s/${seller.shopSlug}`)}>
-      <div className="tile__img" aria-hidden="true">{seller.photo}</div>
+    <div className="tile">
+      <Avatar name={seller.name} size={62} />
       <div className="tile__body">
         <div className="tile__meta">{t('cus.soldBy')}</div>
         <div className="tile__title">{seller.shopName}</div>
         <div className="tile__meta">
-          ⭐ {seller.rating} ({seller.ratingCount}) · {seller.village}
+          <IconStar aria-hidden="true" /> {seller.rating} ({seller.ratingCount}) · {seller.village}
         </div>
         <div className="tiny num dim">{seller.womenBizId}</div>
       </div>
-      <span aria-hidden="true">›</span>
-    </button>
-  )
-}
-
-/** Seller storefront - where her share QR lands. */
-export function SellerStore() {
-  const { slug } = useParams()
-  const t = useT()
-  const nav = useNavigate()
-  const { add } = useCart()
-
-  const [sellerData, loadingSeller] = useAsync(() => api.sellerBySlug(slug!), [slug])
-  const [catalogData, loadingCatalog] = useAsync(() => api.catalog(), [])
-
-  if (loadingSeller || loadingCatalog) {
-    return <><AppBar title="" onBack={() => nav(-1)} /><div className="screen"><Loading /></div></>
-  }
-  if (!sellerData) {
-    return <><AppBar title="" onBack={() => nav(-1)} /><div className="screen"><EmptyState title="—" /></div></>
-  }
-
-  const seller = sellerData.seller
-  const products = (catalogData?.products ?? []).filter((p) => p.sellerId === seller.id)
-
-  // Devanagari initial: take the first letter WITH its vowel sign. A plain
-  // slice(0,1) on सुनीता yields स and drops the matra, which is not how the
-  // name starts. This keeps the whole cluster: सु.
-  const initial = /^.[ऀ-ःऺ-ॏ॑-ॗॢॣ]*/
-    .exec(seller.name ?? '')?.[0] ?? ''
-
-  // Filled and empty stars, so the rating reads without relying on colour.
-  const filled = Math.round(seller.rating)
-  const stars = '★'.repeat(filled) + '☆'.repeat(Math.max(0, 5 - filled))
-
-  return (
-    <>
-      <AppBar title={t('app.name')} onBack={() => nav(-1)} />
-
-      <div className="screen stack">
-        {/* --- her shop card: banner, identity, then the ID badge --- */}
-        <div className="shopcard">
-          <div className="shopcard__band">
-            <div className="shop-avatar" aria-hidden="true">
-              {initial}
-            </div>
-            <div className="grow">
-              <h1 className="shopcard__name">{seller.name}</h1>
-              <p className="shopcard__meta">
-                📍 {seller.village} · {seller.shopName}
-              </p>
-              <p className="shopcard__meta">
-                <span className="stars" aria-hidden="true">{stars}</span>{' '}
-                <span className="dim">({seller.ratingCount})</span>
-              </p>
-            </div>
-          </div>
-
-          <div className="shopcard__foot">
-            {/* Her ID goes on her packaging, so it is shown here, not hidden. */}
-            <span className="idpill">{seller.womenBizId}</span>
-            <span className="verified">
-              <span aria-hidden="true">✓</span> {t('cus.verifiedSeller')}
-            </span>
-          </div>
-        </div>
-
-        {seller.about && (
-          <Card>
-            <p className="small muted" style={{ margin: 0 }}>{seller.about}</p>
-          </Card>
-        )}
-
-        {/* --- her products ---------------------------------------- */}
-        <div>
-          <div className="sec-head">
-            <h2 className="sec-head__t">
-              {t('cus.herProducts')} ({products.length})
-            </h2>
-          </div>
-
-          {products.length === 0 ? (
-            <Card><EmptyState icon="📦" title={t('prod.noProducts')} /></Card>
-          ) : (
-            <div className="stack-sm">
-              {products.map((p) => (
-                <Card key={p.id} style={{ padding: 0, overflow: 'hidden' }}>
-                  <button
-                    className="prow"
-                    onClick={() => nav(`/shop/p/${p.id}`)}
-                    style={{
-                      background: 'none', border: 0, width: '100%',
-                      font: 'inherit', color: 'inherit', textAlign: 'left', cursor: 'pointer',
-                    }}
-                  >
-                    <ProductImage src={p.imageUrl} emoji={p.emoji} size={74} className="prow__img" />
-                    <span className="prow__body">
-                      <span className="prow__name">{p.name}</span>
-                      <span className="prow__meta">
-                        {p.madeToOrder
-                          ? t('prod.madeToOrder')
-                          : `${p.stock} ${t(`unit.${p.unit}`)}`}
-                        {' · '}
-                        {p.isFood ? t('cus.homemade') : (p.material ?? '')}
-                      </span>
-                      <span className="prow__price">
-                        <Rupees value={p.price} /> <span>/ {t(`unit.${p.unit}`)}</span>
-                      </span>
-                    </span>
-                  </button>
-
-                  <div className="prow__actions">
-                    <Button onClick={() => { add(p, 1); nav('/shop/cart') }}>
-                      🛒 {t('cus.buyNow')}
-                    </Button>
-                    <a
-                      className="btn btn--ghost"
-                      href={`https://wa.me/?text=${encodeURIComponent(`${p.name} — ${seller.shopName}`)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      💬 WhatsApp
-                    </a>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </>
+    </div>
   )
 }

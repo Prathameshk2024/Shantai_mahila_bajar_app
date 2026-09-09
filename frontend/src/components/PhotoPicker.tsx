@@ -1,29 +1,33 @@
 import { useRef, useState } from 'react'
 import { useT } from '../i18n/I18nProvider.js'
-import { UploadDisabledError, uploadImage } from '../lib/upload.js'
+import {
+  FileTooLargeError, MAX_UPLOAD_MB, NotAnImageError, UploadDisabledError, uploadImage,
+} from '../lib/upload.js'
 import { Button, Notice } from './ui.js'
+import { IconClose, IconGallery } from './icons.js'
 
 /**
- * Take or choose a product photo, then upload it to Cloudinary.
+ * Choose one product photo from the gallery, then upload it to Cloudinary.
  *
- * `capture="environment"` opens the rear camera directly on Android instead of
- * a file browser, which is what a seller expects when she taps "फोटो काढा".
- * She can still pick from her gallery.
+ * One photo, one button. Once a photo is in, "choose from gallery" goes dead
+ * rather than silently replacing what she already picked - a second tap at
+ * that point is nearly always a mis-tap. Removing the photo brings it back.
  *
- * If Cloudinary is not configured the component says so and the wizard falls
- * back to the emoji picker, so the app keeps working with no image account.
+ * If Cloudinary is not configured the component says so and tells the wizard,
+ * which then stops asking for a photo it cannot accept.
  */
 export default function PhotoPicker({
   imageUrl,
   onUploaded,
   onCleared,
+  onUnavailable,
 }: {
   imageUrl?: string
   onUploaded: (img: { url: string; publicId: string }) => void
   onCleared: () => void
+  onUnavailable?: () => void
 }) {
   const t = useT()
-  const cameraRef = useRef<HTMLInputElement | null>(null)
   const galleryRef = useRef<HTMLInputElement | null>(null)
 
   const [progress, setProgress] = useState<number | null>(null)
@@ -43,6 +47,16 @@ export default function PhotoPicker({
     } catch (err) {
       if (err instanceof UploadDisabledError) {
         setDisabled(true)
+        onUnavailable?.()
+      } else if (err instanceof FileTooLargeError) {
+        // Name the limit AND what she picked. "Too big" on its own leaves her
+        // guessing which photo to try next.
+        setError(t('photo.tooBig', {
+          max: MAX_UPLOAD_MB,
+          size: (err.bytes / 1024 / 1024).toFixed(1),
+        }))
+      } else if (err instanceof NotAnImageError) {
+        setError(t('photo.notImage'))
       } else {
         setError(t('photo.failed'))
       }
@@ -58,19 +72,16 @@ export default function PhotoPicker({
   return (
     <div className="stack-sm">
       <input
-        ref={cameraRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        hidden
-        onChange={(e) => void handle(e.target.files?.[0])}
-      />
-      <input
         ref={galleryRef}
         type="file"
         accept="image/*"
         hidden
-        onChange={(e) => void handle(e.target.files?.[0])}
+        onChange={(e) => {
+          void handle(e.target.files?.[0])
+          // Clearing the input is what lets her remove a photo and then pick
+          // the very same file again - onChange never fires twice for one value.
+          e.target.value = ''
+        }}
       />
 
       {imageUrl && (
@@ -89,7 +100,7 @@ export default function PhotoPicker({
             onClick={onCleared}
             style={{ position: 'absolute', top: 8, right: 8, width: 'auto' }}
           >
-            ✕
+            <IconClose aria-hidden="true" />
           </Button>
         </div>
       )}
@@ -115,18 +126,19 @@ export default function PhotoPicker({
 
       {error && <Notice tone="danger">{error}</Notice>}
 
-      <div className="btn-row">
-        <Button onClick={() => cameraRef.current?.click()} disabled={progress !== null}>
-          📷 {t('photo.take')}
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => galleryRef.current?.click()}
-          disabled={progress !== null}
-        >
-          🖼️ {t('photo.choose')}
-        </Button>
-      </div>
+      <Button
+        variant="ghost"
+        onClick={() => galleryRef.current?.click()}
+        disabled={progress !== null || !!imageUrl}
+      >
+        <IconGallery aria-hidden="true" /> {t('photo.choose')}
+      </Button>
+
+      {/* Said up front. A limit she only meets by breaking it is a limit that
+          costs her an upload and a retry on a slow connection. */}
+      {!imageUrl && (
+        <div className="tiny dim center">{t('photo.limit', { max: MAX_UPLOAD_MB })}</div>
+      )}
     </div>
   )
 }

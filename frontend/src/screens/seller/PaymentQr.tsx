@@ -4,10 +4,11 @@ import { buildUpiLink, isValidUpi } from '@shared/seller.js'
 import { useT } from '../../i18n/I18nProvider.js'
 import { api, ApiError } from '../../lib/api.js'
 import {
-  AppBar, AudioHelpButton, Button, Card, EmptyState, Field, Loading,
+  AppBar, Button, Card, EmptyState, Field, Loading,
   Notice, Pill, TextInput, useAsync,
 } from '../../components/ui.js'
 import QrCode from '../../components/QrCode.js'
+import { IconCheck, IconEdit, IconQr, IconWaiting } from '../../components/icons.js'
 
 /**
  * SELLER PAYMENT QR — a real step, not something we pretend happened.
@@ -52,7 +53,7 @@ export default function PaymentQr() {
         upiId: seller.upiId,
         name: seller.shopName,
         amount: 100,
-        note: 'Shanta Mahila Bazar',
+        note: 'Shantai Mahila Bazar',
       })
     : ''
 
@@ -81,14 +82,11 @@ export default function PaymentQr() {
     setBusy(false)
   }
 
-  const spoken = `${t('qrpay.title')}. ${t('qrpay.lede')}`
-
   return (
     <>
       <AppBar
         title={t('qrpay.title')}
         backTo="/seller/profile"
-        right={<AudioHelpButton text={spoken} />}
       />
 
       <div className="screen stack">
@@ -98,7 +96,7 @@ export default function PaymentQr() {
         {!ready && !editing && (
           <Card>
             <EmptyState
-              icon="🔳"
+              icon={IconQr}
               title={t('qrpay.empty')}
               body={hasUpi ? t('qrpay.emptyBodyHasUpi') : t('qrpay.emptyBody')}
               action={
@@ -169,7 +167,7 @@ export default function PaymentQr() {
                 </div>
 
                 <div>
-                  <Pill tone={seller.upiVerified ? 'ok' : 'warn'} icon={seller.upiVerified ? '✓' : '⏳'}>
+                  <Pill tone={seller.upiVerified ? 'ok' : 'warn'} icon={seller.upiVerified ? <IconCheck /> : <IconWaiting />}>
                     {seller.upiVerified ? t('prof.verified') : t('prof.notVerified')}
                   </Pill>
                 </div>
@@ -177,7 +175,7 @@ export default function PaymentQr() {
             </Card>
 
             <Button variant="ghost" onClick={() => { setUpi(seller.upiId); setEditing(true) }}>
-              ✏️ {t('qrpay.change')}
+              <IconEdit aria-hidden="true" /> {t('qrpay.change')}
             </Button>
           </>
         )}

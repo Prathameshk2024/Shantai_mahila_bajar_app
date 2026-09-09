@@ -69,6 +69,24 @@ function isRealName(name: string): boolean {
   return trimmed.length > 0 && trimmed !== PLACEHOLDER_NAME
 }
 
+/**
+ * Is this customer REGISTERED, as opposed to merely authenticated?
+ *
+ * A verified phone proves who she is; it does not finish an account. The name
+ * does, because the name is what the seller reads on the order and what she is
+ * called when a woman in a village phones her about a delivery. So a record
+ * that exists but carries no name - or carries the ग्राहक placeholder a
+ * checkout left behind - is not registered, and login sends her to the one
+ * screen that asks for it.
+ *
+ * This lives here rather than in the route so the login check and the customer
+ * record cannot drift apart about what "registered" means.
+ */
+export function isRegisteredCustomer(db: Db, customerId: string): boolean {
+  const name = findCustomer(db, customerId)?.name
+  return name ? isRealName(name) : false
+}
+
 export interface AddressInput {
   label?: string
   line: string

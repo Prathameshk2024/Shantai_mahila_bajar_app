@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useT } from '../i18n/I18nProvider.js'
 import { usePincode } from '../store/PincodeContext.js'
 import { Button, Field, Notice, TextInput } from './ui.js'
+import { IconCheck, IconMap } from './icons.js'
 
 /**
  * The one place a customer enters her pincode.
@@ -83,7 +84,7 @@ export default function PincodeBar() {
       >
         <div className="row-between">
           <div className="row" style={{ gap: 'var(--s2)', minWidth: 0 }}>
-            <span aria-hidden="true">📍</span>
+            <span aria-hidden="true"><IconMap /></span>
             <div style={{ minWidth: 0 }}>
               <div className="tiny dim">{t('pin.deliverTo')}</div>
               <strong className="num">{pincode}</strong>
@@ -108,7 +109,7 @@ export default function PincodeBar() {
 
       {info && info.serviceable && (
         <div className="tiny dim">
-          ✓ {t('pin.serviceable', { sellers: info.sellerCount, products: info.productCount })}
+          <IconCheck aria-hidden="true" /> {t('pin.serviceable', { sellers: info.sellerCount, products: info.productCount })}
         </div>
       )}
     </div>

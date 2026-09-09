@@ -2,6 +2,8 @@ import {
   createContext, useCallback, useContext, useMemo, useState, type ReactNode,
 } from 'react'
 import { api, getToken, setToken, type AdminSession } from '../lib/api.js'
+import { useToast } from './ToastContext.js'
+import { useI18n } from '../i18n/I18nProvider.js'
 
 /**
  * One admin account for now - a single ADMIN_EMAIL and password held in the
@@ -35,6 +37,8 @@ function storedSession(): AdminSession | null {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { toast } = useToast()
+  const { t } = useI18n()
   const [session, setSession] = useState<AdminSession | null>(storedSession)
 
   const signIn = useCallback(async (email: string, password: string) => {
@@ -46,9 +50,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* private mode - it just will not survive a refresh */
     }
     setSession(res.session)
-  }, [])
+    toast(t('ok.signedIn'))
+  }, [toast, t])
 
   const signOut = useCallback(() => {
+    // Tell the server first - the request reads the token before it is
+    // cleared. Not awaited: she must end up signed out on this desk whether or
+    // not the network cooperates, and the session idles out on its own.
+    void api.logout().catch(() => {
+      /* offline - nothing more this side can do */
+    })
     setToken(null)
     try {
       localStorage.removeItem(SESSION_KEY)
@@ -56,7 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* nothing to clean up */
     }
     setSession(null)
-  }, [])
+    toast(t('ok.signedOut'))
+  }, [toast, t])
 
   const value = useMemo(() => ({ session, signIn, signOut }), [session, signIn, signOut])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

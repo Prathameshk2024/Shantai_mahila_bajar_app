@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useT } from '../../i18n/I18nProvider.js'
 import { api, ApiError } from '../../lib/api.js'
+import { useToast } from '../../store/ToastContext.js'
 import QrCode from '../../components/QrCode.js'
 import {
-  AppBar, AudioHelpButton, Button, Card, Field, Loading, Notice,
+  AppBar, Button, Card, EmptyState, Field, Loading, Notice,
   Rupees, TextInput, useAsync,
 } from '../../components/ui.js'
+import {
+  IconCamera, IconCheck, IconMail, IconTraining, IconWaiting, IconWarn,
+  IconWhatsapp,
+} from '../../components/icons.js'
 
 /* ================================================================== */
 /* Pay the 50 rupees. She pays the admin account from her own UPI app,  */
@@ -15,6 +20,7 @@ import {
 
 export function Subscription() {
   const t = useT()
+  const { toast } = useToast()
   const nav = useNavigate()
   const [data, loading] = useAsync(() => api.subscription(), [])
 
@@ -29,7 +35,43 @@ export function Subscription() {
     return <><AppBar title={t('pay.title')} backTo="/seller" /><div className="screen"><Loading /></div></>
   }
 
-  const { account, plan } = data
+  const { account, plan, slots, payments } = data
+
+  /**
+   * ALREADY PAID? THEN THERE IS NOTHING TO DO ON THIS SCREEN.
+   *
+   * A woman who has sent her UTR and comes back here sees a form asking for
+   * money again, and the reasonable thing to do with a form is fill it in -
+   * which puts a second ₹50 row in the admin queue for one payment. The
+   * waiting screen answers the only question she actually has.
+   */
+  if (payments.some((p) => p.status === 'PENDING')) {
+    return <Navigate to="/seller/waiting" replace />
+  }
+
+  /**
+   * Slots left means nothing to buy. ₹50 buys 5 more; selling them to a woman
+   * with three empty ones is taking money for something she already has. The
+   * server refuses this too - the screen just says so first, and in Marathi.
+   */
+  if (slots.left > 0) {
+    return (
+      <>
+        <AppBar title={t('pay.title')} backTo="/seller" />
+        <div className="screen stack">
+          <Card>
+            <EmptyState
+              icon={IconCheck}
+              title={t('pay.notNeeded')}
+              body={t('pay.notNeededSub', { n: slots.left })}
+              action={<Button onClick={() => nav('/seller/upload')}>{t('prod.add')}</Button>}
+            />
+          </Card>
+          <Button variant="ghost" onClick={() => nav('/seller/products')}>{t('biz.myProducts')}</Button>
+        </div>
+      </>
+    )
+  }
 
   async function submit() {
     if (utr.trim().length < 6) {
@@ -39,6 +81,7 @@ export function Subscription() {
     setBusy(true)
     try {
       await api.submitPayment(utr.trim())
+      toast(t('ok.paymentSubmitted'))
       nav('/seller/waiting', { replace: true })
     } catch (e) {
       setErr(e instanceof ApiError ? (e.messageMr ?? e.message) : 'Network error')
@@ -49,15 +92,11 @@ export function Subscription() {
 
   const upiLink =
     `upi://pay?pa=${account.upiId}&pn=${encodeURIComponent(account.label)}` +
-    `&am=${plan.price}.00&cu=INR&tn=${encodeURIComponent('Shanta Mahila Bazar')}`
+    `&am=${plan.price}.00&cu=INR&tn=${encodeURIComponent('Shantai Mahila Bazar')}`
 
   return (
     <>
-      <AppBar
-        title={t('pay.title')}
-        backTo="/seller"
-        right={<AudioHelpButton text={`${t('pay.amount')}. ${t('pay.what')}`} />}
-      />
+      <AppBar title={t('pay.title')} backTo="/seller" />
       <div className="screen stack">
         <Card style={{ textAlign: 'center' }}>
           <div className="hero-num"><Rupees value={plan.price} /></div>
@@ -93,7 +132,7 @@ export function Subscription() {
               />
             </Field>
             <Field label={`${t('pay.screenshot')} (${t('common.optional')})`}>
-              <Button variant="quiet" size="sm">📷 {t('pay.screenshot')}</Button>
+              <Button variant="quiet" size="sm"><IconCamera aria-hidden="true" /> {t('pay.screenshot')}</Button>
             </Field>
           </div>
         </Card>
@@ -166,7 +205,7 @@ export function PaymentWaiting() {
         <AppBar title={t('pay.title')} />
         <div className="screen screen--nonav stack">
           <div className="center stack-sm">
-            <div style={{ fontSize: '3.5rem' }} aria-hidden="true">⚠️</div>
+            <div className="bigstate bigstate--warn" aria-hidden="true"><IconWarn /></div>
             <h1 className="h1">{t('wait.rejected')}</h1>
           </div>
           {latest?.rejectReason && <Notice tone="danger">{latest.rejectReason}</Notice>}
@@ -176,14 +215,12 @@ export function PaymentWaiting() {
     )
   }
 
-  const spoken = `${t('wait.title')}. ${t('wait.sub')}. ${t('wait.eta')}. ${t('wait.sms')}.`
-
   return (
     <div className="app-shell">
-      <AppBar title={t('pay.title')} right={<AudioHelpButton text={spoken} />} />
+      <AppBar title={t('pay.title')} />
       <div className="screen screen--nonav stack">
         <div className="center stack-sm" style={{ paddingTop: 'var(--s5)' }}>
-          <div style={{ fontSize: '4rem' }} aria-hidden="true">⏳</div>
+          <div className="bigstate" aria-hidden="true"><IconWaiting /></div>
           <h1 className="h1">{t('wait.title')}</h1>
           <p className="h3" style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{t('wait.sub')}</p>
         </div>
@@ -193,7 +230,7 @@ export function PaymentWaiting() {
         {/* The line that stops her calling support. */}
         <Card className="notice--ok">
           <div className="row">
-            <span style={{ fontSize: '1.5rem' }} aria-hidden="true">📩</span>
+            <span style={{ fontSize: '1.5rem' }} aria-hidden="true"><IconMail /></span>
             <strong>{t('wait.sms')}</strong>
           </div>
         </Card>
@@ -225,8 +262,8 @@ export function PaymentWaiting() {
         <p className="muted small">{t('wait.canDoMeanwhile')}</p>
 
         <div className="btn-row">
-          <Button variant="ghost" onClick={() => nav('/seller/help')}>🎓 {t('wait.watchTraining')}</Button>
-          <Button variant="ghost" onClick={() => nav('/seller/help')}>💬 {t('wait.contactHelp')}</Button>
+          <Button variant="ghost" onClick={() => nav('/seller/help')}><IconTraining aria-hidden="true" /> {t('wait.watchTraining')}</Button>
+          <Button variant="ghost" onClick={() => nav('/seller/help')}><IconWhatsapp aria-hidden="true" /> {t('wait.contactHelp')}</Button>
         </div>
         <Button variant="quiet" onClick={() => nav('/seller')}>{t('biz.title')}</Button>
 

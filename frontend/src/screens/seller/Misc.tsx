@@ -5,11 +5,17 @@ import { slotInfo } from '@shared/seller.js'
 import { useI18n, useT } from '../../i18n/I18nProvider.js'
 import { useAuth } from '../../store/AuthContext.js'
 import { api } from '../../lib/api.js'
-import QrCode from '../../components/QrCode.js'
+import { Avatar } from '../../components/Avatar.js'
 import {
-  AppBar, AudioHelpButton, Button, Card, Choice, ConfirmSheet, EmptyState,
-  Loading, Notice, Pill, Rupees, SectionTitle, SlotMeter, useAsync,
+  AppBar, Button, Card, ConfirmSheet, CopyValue, EmptyState,
+  LanguagePicker, Loading, Notice, Pill, Rupees, SectionTitle, SlotMeter, useAsync,
 } from '../../components/ui.js'
+import {
+  IconCall, IconCheck, IconDown, IconEdit, IconGrowth,
+  IconNext, IconPlus, IconQr, IconShare, IconUp, IconWaiting,
+  IconWhatsapp,
+} from '../../components/icons.js'
+import { PageTour, TourMenu } from '../../components/Walkthrough.js'
 
 /* ================================================================== */
 /* Profile                                                             */
@@ -18,7 +24,7 @@ import {
 export function SellerProfile() {
   const t = useT()
   const nav = useNavigate()
-  const { lang, setLang, langs } = useI18n()
+  const { lang } = useI18n()
   const { signOut } = useAuth()
 
   const [me, loading] = useAsync(() => api.me(), [])
@@ -38,9 +44,7 @@ export function SellerProfile() {
       <div className="screen stack">
         <Card>
           <div className="row">
-            <div className="tile__img" style={{ width: 64, height: 64, fontSize: '2rem' }}>
-              {seller.photo}
-            </div>
+            <Avatar name={seller.name} size={64} />
             <div className="grow">
               <div style={{ fontWeight: 700, fontSize: 'var(--t-md)' }}>{seller.name}</div>
               <div className="small dim">{seller.shopName}</div>
@@ -83,30 +87,38 @@ export function SellerProfile() {
           </div>
         </Card>
 
-        <Card>
+        <Card data-wt="prof-slots">
           <SectionTitle>{t('prof.subscription')}</SectionTitle>
           <SlotMeter
             used={slots.used}
             total={slots.total}
             hint={t('prof.slotsHave', { total: slots.total, used: slots.used })}
           />
-          <div style={{ marginTop: 'var(--s3)' }}>
-            <Button size="sm" onClick={() => nav('/seller/subscription')}>
-              ➕ {t('prof.buyMore')}
-            </Button>
-          </div>
+          {/* Only when there is something to buy. Offering "buy more" to a
+              woman with three empty slots is asking her for ₹50 she does not
+              need to spend, and the server refuses that payment anyway. */}
+          {slots.left === 0 && (
+            <div style={{ marginTop: 'var(--s3)' }}>
+              <Button size="sm" onClick={() => nav('/seller/subscription')}>
+                <IconPlus aria-hidden="true" /> {t('prof.buyMore')}
+              </Button>
+            </div>
+          )}
         </Card>
 
-        <Card>
+        <Card data-wt="prof-pay">
           <SectionTitle>{t('prof.payment')}</SectionTitle>
           <div className="stack-sm">
             <Notice tone="warn">{t('reg.upiHint')}</Notice>
             <div className="row-between">
               <div>
                 <div className="small dim">{t('pay.upiId')}</div>
-                <strong className="num">{seller.upiId}</strong>
+                {/* Read out over the phone, typed into a bank app, sent on
+                    WhatsApp - copying beats retyping a string that pays
+                    somebody else if one character is wrong. */}
+                <CopyValue value={seller.upiId} />
               </div>
-              <Pill tone={seller.upiVerified ? 'ok' : 'warn'} icon={seller.upiVerified ? '✓' : '⏳'}>
+              <Pill tone={seller.upiVerified ? 'ok' : 'warn'} icon={seller.upiVerified ? <IconCheck /> : <IconWaiting />}>
                 {seller.upiVerified ? t('prof.verified') : t('prof.notVerified')}
               </Pill>
             </div>
@@ -114,7 +126,7 @@ export function SellerProfile() {
             {/* The payment QR is its own step - say plainly whether it is done. */}
             {seller.upiQrReady ? (
               <Button variant="ghost" size="sm" onClick={() => nav('/seller/payment')}>
-                🔳 {t('qrpay.title')}
+                <IconQr aria-hidden="true" /> {t('qrpay.title')}
               </Button>
             ) : (
               <>
@@ -141,22 +153,15 @@ export function SellerProfile() {
               <Row label={t('reg.capacity')} value={String(seller.monthlyCapacity)} />
             )}
             {seller.shgName && <Row label={t('reg.shgName')} value={seller.shgName} />}
-            {seller.sellsFood && (
-              <>
-                <Row label={t('prod.fssai')} value={seller.fssai ?? '—'} />
-                <Row label={t('prod.fssaiExpiry')} value={seller.fssaiExpiry ?? '—'} />
-              </>
-            )}
           </div>
         </Card>
 
-        <Card>
-          <SectionTitle>{t('prof.language')}</SectionTitle>
-          <div className="stack-sm">
-            {langs.map((l) => (
-              <Choice key={l.code} selected={lang === l.code} onSelect={() => setLang(l.code)} title={l.label} />
-            ))}
-          </div>
+        <Button variant="ghost" onClick={() => nav('/seller/profile/edit')}>
+          <IconEdit aria-hidden="true" /> {t('prof.edit')}
+        </Button>
+
+        <Card data-wt="prof-lang">
+          <LanguagePicker />
         </Card>
 
         <Button variant="ghost" onClick={() => setLogoutOpen(true)}>{t('prof.logout')}</Button>
@@ -171,6 +176,8 @@ export function SellerProfile() {
         onCancel={() => setLogoutOpen(false)}
         onConfirm={() => { signOut(); nav('/', { replace: true }) }}
       />
+
+      <PageTour id="seller.profile" />
     </>
   )
 }
@@ -188,65 +195,45 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 /* Help & Training                                                     */
 /* ================================================================== */
 
-const TRAINING = [
-  { id: 't1', icon: '📱', mr: 'ॲप कसे वापरायचे', en: 'How to use the app', mins: 3 },
-  { id: 't2', icon: '💰', mr: '50 रुपये कसे भरायचे', en: 'How to pay the 50 rupees', mins: 2 },
-  { id: 't3', icon: '📸', mr: 'फोनने चांगला फोटो कसा काढायचा', en: 'Taking good photos', mins: 4 },
-  { id: 't4', icon: '🎤', mr: 'बोलून नाव कसे टाकायचे', en: 'Using voice typing', mins: 2 },
-  { id: 't5', icon: '📦', mr: 'ऑर्डर आल्यावर काय करायचे', en: 'When an order arrives', mins: 5 },
-  { id: 't6', icon: '🛵', mr: 'पोहोचवताना OTP कसा घ्यायचा', en: 'Taking the OTP at delivery', mins: 2 },
-  { id: 't7', icon: '🏦', mr: 'पैसे आले का ते कसे तपासायचे', en: 'Checking the money arrived', mins: 3 },
-  { id: 't8', icon: '📜', mr: 'FSSAI परवाना कसा काढायचा', en: 'How to apply for FSSAI', mins: 6 },
-  { id: 't9', icon: '💡', mr: 'किंमत कशी ठरवायची', en: 'How to price your product', mins: 5 },
-]
-
 export function SellerHelp() {
   const t = useT()
-  const { lang } = useI18n()
 
   return (
     <>
       <AppBar title={t('help.title')} />
       <div className="screen stack">
-        <Card>
+        {/* Her own screens first: a walkthrough runs on the real page,
+            which is the fastest answer to "how do I do this". */}
+        <div>
+          <SectionTitle>{t('wt.title')}</SectionTitle>
+          <p className="small dim" style={{ marginTop: -4, marginBottom: 'var(--s2)' }}>
+            {t('wt.sub')}
+          </p>
+          <TourMenu role="seller" />
+        </div>
+
+        <Card data-wt="help-contact">
           <SectionTitle>{t('help.contact')}</SectionTitle>
           <div className="stack-sm">
             <a className="btn btn--ghost" href="https://wa.me/919000000000" target="_blank" rel="noreferrer">
-              💬 {t('help.whatsapp')}
+              <IconWhatsapp aria-hidden="true" /> {t('help.whatsapp')}
             </a>
-            <a className="btn btn--ghost" href="tel:+919000000000">📞 {t('help.call')}</a>
-            <Button variant="quiet">📝 {t('help.complaint')}</Button>
+            <a className="btn btn--ghost" href="tel:+919000000000"><IconCall aria-hidden="true" /> {t('help.call')}</a>
+            <Button variant="quiet"><IconEdit aria-hidden="true" /> {t('help.complaint')}</Button>
           </div>
         </Card>
-
-        <div>
-          <SectionTitle>{t('help.videos')}</SectionTitle>
-          <p className="small dim" style={{ marginTop: -4, marginBottom: 'var(--s2)' }}>
-            {t('help.videosSub')}
-          </p>
-          <div className="stack-sm">
-            {TRAINING.map((v) => (
-              <button key={v.id} className="tile">
-                <div className="tile__img" aria-hidden="true">{v.icon}</div>
-                <div className="tile__body">
-                  <div className="tile__title">{lang === 'mr' ? v.mr : v.en}</div>
-                  <div className="tile__meta">▶ {v.mins} {t('help.minutes')}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
 
         <Card>
           <SectionTitle>{t('help.faq')}</SectionTitle>
           <div className="stack-sm small">
-            <div>• मी ₹50 भरले पण मंजूर झाले नाही</div>
-            <div>• पैसे कधी मिळतील?</div>
-            <div>• FSSAI परवाना कसा काढायचा?</div>
-            <div>• ऑर्डर आल्यावर काय करायचे?</div>
+            <div>• {t('help.faq1')}</div>
+            <div>• {t('help.faq2')}</div>
+            <div>• {t('help.faq3')}</div>
           </div>
         </Card>
       </div>
+
+      <PageTour id="seller.help" />
     </>
   )
 }
@@ -270,14 +257,16 @@ export function SellerGrowth() {
 
   const week = data?.week
 
-  // Below 5 orders a chart looks broken and reads as failure. Show nothing.
-  if (!week || week.ordersThisWeek < 5) {
+  // Only when she has never earned at all. It used to hide below FIVE orders
+  // this week, which meant a woman with her first sale - the moment that most
+  // deserves a chart - was told there was not enough information.
+  if (!week) {
     return (
       <>
         <AppBar title={t('grow.title')} backTo="/seller" />
         <div className="screen">
           <Card>
-            <EmptyState icon="🌱" title={t('grow.needMoreData')} body={t('grow.needMoreDataSub')} />
+            <EmptyState icon={IconGrowth} title={t('grow.needMoreData')} body={t('grow.needMoreDataSub')} />
           </Card>
         </div>
       </>
@@ -289,11 +278,9 @@ export function SellerGrowth() {
   const diff = total - week.lastWeekTotal
   const up = diff >= 0
 
-  const spoken = `${t('grow.earnWeek')} ${total} ${t('common.rupees')}. ${t('grow.vsLastWeek')} ${Math.abs(diff)} ${t('common.rupees')} ${up ? t('grow.more') : t('grow.less')}.`
-
   return (
     <>
-      <AppBar title={t('grow.title')} backTo="/seller" right={<AudioHelpButton text={spoken} />} />
+      <AppBar title={t('grow.title')} backTo="/seller" />
       <div className="screen stack">
         {/* The number first, the chart second. */}
         <Card>
@@ -301,7 +288,7 @@ export function SellerGrowth() {
           <div className="row" style={{ alignItems: 'baseline', gap: 'var(--s3)', flexWrap: 'wrap' }}>
             <span className="hero-num"><Rupees value={total} /></span>
             <span style={{ color: up ? 'var(--ok)' : 'var(--danger)', fontWeight: 700 }}>
-              {up ? '▲' : '▼'} ₹{Math.abs(diff)} {up ? t('grow.more') : t('grow.less')}
+              {up ? <IconUp aria-hidden="true" /> : <IconDown aria-hidden="true" />} ₹{Math.abs(diff)} {up ? t('grow.more') : t('grow.less')}
             </span>
           </div>
 
@@ -343,7 +330,7 @@ export function SellerGrowth() {
               <div className="hero-num num" style={{ fontSize: 'var(--t-lg)' }}>{week.views}</div>
               <div className="small dim">{t('grow.peopleSaw', { n: week.views })}</div>
             </div>
-            <span style={{ fontSize: '1.5rem' }} aria-hidden="true">→</span>
+            <span style={{ fontSize: '1.5rem' }} aria-hidden="true"><IconNext /></span>
             <div style={{ textAlign: 'right' }}>
               <div className="hero-num num" style={{ fontSize: 'var(--t-lg)' }}>{week.ordered}</div>
               <div className="small dim">{t('grow.peopleOrdered', { n: week.ordered })}</div>
@@ -351,71 +338,7 @@ export function SellerGrowth() {
           </div>
         </Card>
 
-        <Button variant="ghost">📤 {t('grow.shareMonth')}</Button>
-      </div>
-    </>
-  )
-}
-
-/* ================================================================== */
-/* My QR - the shareable poster                                        */
-/* ================================================================== */
-
-export function SellerQr() {
-  const t = useT()
-  const [me, loading] = useAsync(() => api.me(), [])
-
-  if (loading || !me) {
-    return <><AppBar title={t('qr.title')} backTo="/seller" /><div className="screen"><Loading /></div></>
-  }
-
-  const seller = me.seller
-
-  // Her link lives on our own domain, never a vendor's. Android App Links open
-  // it in the app; if the app is not installed, the Play Store URL carries
-  // ?referrer=shop=<slug> and the Install Referrer API routes to her shop on
-  // first launch. Do NOT use Firebase Dynamic Links - shut down Aug 2025.
-  const shareUrl = `https://shantamahilabazar.in/s/${seller.shopSlug}`
-
-  return (
-    <>
-      <AppBar title={t('qr.title')} backTo="/seller" />
-      <div className="screen stack">
-        <p className="muted">{t('qr.sub')}</p>
-
-        {/* The poster, not a bare QR - her photo, name and ID go on it. */}
-        <Card style={{ textAlign: 'center' }}>
-          <div className="stack-sm">
-            <div style={{ fontSize: '2.5rem' }} aria-hidden="true">{seller.photo}</div>
-            <strong style={{ fontSize: 'var(--t-md)' }}>{seller.shopName}</strong>
-            <div className="tiny num dim">{seller.womenBizId}</div>
-            <QrCode value={shareUrl} label={t('qr.title')} />
-            <div className="small" style={{ fontWeight: 600 }}>स्कॅन करा आणि ऑर्डर करा</div>
-            <div className="tiny dim" style={{ wordBreak: 'break-all' }}>{shareUrl}</div>
-          </div>
-        </Card>
-
-        <div className="btn-row">
-          <Button
-            onClick={() =>
-              window.open(`https://wa.me/?text=${encodeURIComponent(`${seller.shopName}\n${shareUrl}`)}`)
-            }
-          >
-            💬 {t('qr.shareWhatsapp')}
-          </Button>
-          <Button variant="ghost">⬇ {t('qr.download')}</Button>
-        </div>
-
-        <div className="row" style={{ gap: 'var(--s3)' }}>
-          <Card className="grow">
-            <div className="small dim">{t('qr.scans')}</div>
-            <div className="hero-num num" style={{ fontSize: 'var(--t-xl)' }}>{seller.qrScans}</div>
-          </Card>
-          <Card className="grow">
-            <div className="small dim">{t('qr.orders')}</div>
-            <div className="hero-num num" style={{ fontSize: 'var(--t-xl)' }}>{seller.qrOrders}</div>
-          </Card>
-        </div>
+        <Button variant="ghost"><IconShare aria-hidden="true" /> {t('grow.shareMonth')}</Button>
       </div>
     </>
   )

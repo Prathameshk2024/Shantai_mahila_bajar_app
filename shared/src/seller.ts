@@ -66,14 +66,71 @@ export const PRODUCT_STATUS_STYLE: Record<
 /* friendly message; the server validates because the client can lie.  */
 /* ------------------------------------------------------------------ */
 
-/** FSSAI: 14 digits, first digit 1 (Central) or 2 (State/Basic). */
-export function isValidFssai(value: string | undefined): boolean {
-  return /^[12]\d{13}$/.test(String(value ?? '').replace(/\s/g, ''))
-}
 
 /** Indian mobile: 10 digits starting 6-9. */
 export function isValidPhone(value: string | undefined): boolean {
-  return /^[6-9]\d{9}$/.test(String(value ?? '').replace(/\D/g, ''))
+  return /^[6-9]\d{9}$/.test(normalizePhone(value))
+}
+
+/**
+ * The ten digits of an Indian mobile number, and nothing else.
+ *
+ * The phone IS the account here - it is what login looks a seller up by - so
+ * "98765 43210", "+91 9876543210" and "9876543210" have to resolve to one
+ * value. They did not, which is why sellers who had already registered were
+ * being sent back through registration: the stored string and the typed one
+ * never matched.
+ */
+export function normalizePhone(value: string | undefined): string {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  // Strip a country code or a trunk prefix, so the stored number is always the
+  // same ten digits she types at login.
+  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2)
+  if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1)
+  return digits
+}
+
+/** Whether two spellings mean the same number. Empty never matches empty. */
+export function samePhone(a: string | undefined, b: string | undefined): boolean {
+  const left = normalizePhone(a)
+  if (!left) return false
+  return left === normalizePhone(b)
+}
+
+/**
+ * A shop description composed from what she told us at registration.
+ *
+ * `about` is optional, and most women skip it - it is the one free-text field
+ * in a long form, on a phone, in Marathi. Left empty her shop opens with a
+ * name and nothing else, which reads to a customer like an abandoned listing.
+ *
+ * This only fills the gap; anything she writes herself replaces it.
+ */
+export function defaultAbout(s: {
+  shopName: string
+  village: string
+  businessType?: 'individual' | 'shg' | 'udyam'
+  shgName?: string
+  sellsFood?: boolean
+  yearsInBusiness?: number
+}): string {
+  const parts: string[] = []
+
+  parts.push(
+    s.sellsFood
+      ? `${s.shopName} - ${s.village} येथून घरगुती पदार्थ.`
+      : `${s.shopName} - ${s.village} येथून हस्तनिर्मित वस्तू.`,
+  )
+
+  if (s.businessType === 'shg' && s.shgName?.trim()) {
+    parts.push(`${s.shgName.trim()} या बचत गटाच्या सदस्या.`)
+  }
+
+  if (s.yearsInBusiness && s.yearsInBusiness > 0) {
+    parts.push(`${s.yearsInBusiness} वर्षांचा अनुभव.`)
+  }
+
+  return parts.join(' ').replace(/\s+/g, ' ').trim()
 }
 
 export function isValidPincode(value: string | undefined): boolean {
@@ -119,3 +176,57 @@ export const EDUCATION_LEVELS: { value: string; mr: string; en: string }[] = [
   { value: 'higher', mr: '12 वी', en: '12th' },
   { value: 'graduate', mr: 'पदवी', en: 'Graduate' },
 ]
+
+/**
+ * WHAT SHE MAY CHANGE ABOUT HERSELF, AND WHAT IT HAS TO LOOK LIKE.
+ *
+ * The allow-list on `PATCH /sellers/me` decides WHICH fields can move - her
+ * status, her slots and her SMB ID are not on it and never will be. This
+ * decides whether the values she sent make sense, and it runs on both sides
+ * for the usual two reasons: the form can say "18 to 90" the instant she types
+ * it, and the server can refuse a delivery fee of -500 typed by something that
+ * is not the form.
+ *
+ * Returns Marathi messages keyed by field, which is the shape `{ fields }` in
+ * an API error already has, so a server refusal drops straight into the same
+ * red text under the same box.
+ */
+export function validateSellerProfile(
+  p: Partial<Pick<Seller,
+    | 'name' | 'shopName' | 'about' | 'whatsapp' | 'age' | 'yearsInBusiness'
+    | 'monthlyCapacity' | 'deliveryFee' | 'freeDeliveryAbove' | 'minOrder'
+    | 'upiId' | 'pincodes'
+  >>,
+): Record<string, string> {
+  const f: Record<string, string> = {}
+  const blank = (v: unknown) => typeof v === 'string' && !v.trim()
+
+  // Present-but-empty is the failure. An absent key means "not editing this".
+  if ('name' in p && blank(p.name)) f.name = 'नाव आवश्यक आहे'
+  if ('shopName' in p && blank(p.shopName)) f.shopName = 'दुकानाचे नाव आवश्यक आहे'
+
+  if (p.age != null && (p.age < 18 || p.age > 90)) f.age = 'वय 18 ते 90 दरम्यान असावे'
+  if (p.whatsapp && !isValidPhone(p.whatsapp)) f.whatsapp = '10 अंकी मोबाईल नंबर टाका'
+  if ('upiId' in p && !isValidUpi(p.upiId)) f.upiId = 'UPI आयडी बरोबर नाही'
+
+  // Money and counts: never negative, and never a number that is not one.
+  const positive: [keyof typeof p, string][] = [
+    ['yearsInBusiness', 'वर्षे बरोबर लिहा'],
+    ['monthlyCapacity', 'संख्या बरोबर लिहा'],
+    ['deliveryFee', 'रक्कम बरोबर लिहा'],
+    ['freeDeliveryAbove', 'रक्कम बरोबर लिहा'],
+    ['minOrder', 'रक्कम बरोबर लिहा'],
+  ]
+  for (const [key, message] of positive) {
+    const v = p[key]
+    if (v == null) continue
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) f[key as string] = message
+  }
+
+  // She delivers to pincodes, so a typo here is an order she never receives.
+  if (p.pincodes && p.pincodes.some((code) => !isValidPincode(code))) {
+    f.pincodes = '6 अंकी पिनकोड टाका'
+  }
+
+  return f
+}
