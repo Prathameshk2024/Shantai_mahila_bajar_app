@@ -45,14 +45,15 @@ function roleFrom(value: string | undefined): RoleParam {
  * the seller ends up. There is no second auth flow anywhere in the app.
  *
  * `mode` only changes what happens to a number with no record behind it:
- * join - a seller is taken straight into the registration wizard login - the
- * seller is told plainly that they have to register, and offered the way
- * Either way the intent they picked on the landing page is preserved.
+ *   join  - a seller is taken straight into the registration wizard
+ *   login - the seller is told plainly that registration comes first, and
+ *           offered the way
+ * Either way the intent picked on the landing page is preserved.
  *
  * Already signed in with this role? Then the login is already done, and the
- * only correct thing to do is let the seller through. Making their verify an
- * OTP they has already verified is how a back press starts to look like being
- * logged out - see AuthContext for the rest of that story.
+ * only correct thing to do is let the seller through. Asking a seller to
+ * verify an OTP already verified is how a back press starts to look like
+ * being logged out - see AuthContext for the rest of that story.
  */
 export function PhoneScreen({ mode }: { mode: 'join' | 'login' }) {
   const { role: roleParam } = useParams()
@@ -65,10 +66,10 @@ export function PhoneScreen({ mode }: { mode: 'join' | 'login' }) {
   /**
    * A registration the seller has already passed the OTP for, still in date.
    *
-   * Read once on mount. If the seller is holding one, this screen must not ask
-   * for another code - it offers to take them back into the wizard instead,
-   * which is the difference between one SMS and two every time they press
-   * back.
+   * Read once on mount. A seller holding one must not be asked for another
+   * code - this screen offers to take the seller back into the wizard
+   * instead, which is the difference between one SMS and two on every back
+   * press.
    */
   const [pending] = useState(() => (role === 'seller' ? liveTicket() : null))
 
@@ -213,9 +214,9 @@ export function OtpScreen() {
   /** Verified, but this number has no seller record yet. */
   const [needsRegistration, setNeedsRegistration] = useState(false)
 
-  // Read ONCE, on mount. Verifying a customer's OTP signs the seller in a
+  // Read ONCE, on mount. Verifying a customer's OTP signs the customer in a
   // moment before it navigates, and a live check here would see that new
-  // session and redirect they to /shop out from under the flow.
+  // session and redirect to /shop out from under the flow.
   const [arrivedSignedIn] = useState(() => session?.role === role)
   if (arrivedSignedIn) return <Navigate to={homeFor(role)} replace />
 
@@ -228,7 +229,7 @@ export function OtpScreen() {
        * MSG91 checks the digits and returns a JWT; the server then trades that
        * JWT for the number it was issued for and refuses it if that is not the
        * number the seller typed. A token alone proves SOME phone passed an
-       * OTP, which is not the same as their.
+       * OTP, which is not the same as this one.
        */
       const credential = widgetEnabled ? await verifyWidgetOtp(code) : code
       const res = await api.verifyOtp(phone, credential, role)
@@ -240,10 +241,10 @@ export function OtpScreen() {
         return
       }
 
-      // A customer IS authenticated here - only the seller's name is missing -
-      // so they is signed in and taken to the one screen that asks for it,
-      // which writes with their own token. Stopping to tell them they must
-      // register would be an interstitial in front of a single question.
+      // A customer IS authenticated here - only the name is missing - so the
+      // customer is signed in and taken to the one screen that asks for it,
+      // which writes with that same token. Stopping to say "you must
+      // register" would be an interstitial in front of a single question.
       if (role === 'customer' && res.session) {
         signIn(res.session)
         nav('/register/customer', { replace: true })
@@ -254,8 +255,8 @@ export function OtpScreen() {
       // register without it, so it is kept before any navigation happens.
       if (res.ticket) stashRegisterTicket(res.ticket)
 
-      // "join" on the seller door means they already said they are new, so the
-      // wizard is what they asked for and an interstitial would just be a tap.
+      // "join" on the seller door already says the seller is new, so the
+      // wizard is what was asked for and an interstitial would just be a tap.
       if (role === 'seller' && mode === 'join') {
         nav(`/register/seller?phone=${phone}`, { replace: true })
         return
@@ -266,15 +267,15 @@ export function OtpScreen() {
       setNeedsRegistration(true)
     } catch (e) {
       // A widget failure - origin refused, session lost, MSG91 unreachable -
-      // is not a wrong code, but they are told it is, and on a phone there is
+      // is not a wrong code, but the seller is told it is, and on a phone
       // no console to check. In dev the real message is shown instead; in
-      // production they still gets the plain Marathi one.
+      // production the seller still gets the plain Marathi one.
       if (import.meta.env.DEV) console.error('[otp] verify failed:', e)
 
       // The widget's OTP session lives in page memory, so a reload between the
-      // phone screen and this one loses it. Telling the seller the code is
-      // wrong sends them back to the keypad, where nothing they type can work;
-      // the way out is the resend button directly below this message.
+      // phone screen and this one loses it. Calling the code wrong sends the
+      // seller back to the keypad, where nothing typed there can work; the
+      // way out is the resend button directly below this message.
       if (e instanceof Error && e.message === WIDGET_SESSION_LOST) {
         setErr(t('onb.otpSessionLost'))
         return
@@ -284,8 +285,8 @@ export function OtpScreen() {
       // before our server hears about it, so a 401 from us is never "the
       // seller mistyped". It is an access token the exchange refused, and
       // MSG91 verifies a request once - so those digits are spent however
-      // right they were. Telling they they are wrong sends them to retype a
-      // correct code for ever; the only thing that can work is a new one.
+      // right they were. Calling those digits wrong sends the seller off to
+      // retype a correct code for ever; only a new code can work.
       if (widgetEnabled && e instanceof ApiError && e.status === 401) {
         forgetWidgetSession()
         setErr(t('onb.otpSessionLost'))
@@ -302,7 +303,7 @@ export function OtpScreen() {
   /**
    * Send it again. `retryOtp` rather than `sendOtp` on the widget path: MSG91
    * treats a resend as a retry on the session it already opened, and starting
-   * a new one would invalidate the code the seller may be reading off their
+   * a new one would invalidate the code the seller may be reading off the
    * screen.
    */
   async function resend() {

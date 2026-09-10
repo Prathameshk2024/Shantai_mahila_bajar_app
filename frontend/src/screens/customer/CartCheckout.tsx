@@ -208,8 +208,8 @@ export function Checkout() {
   const groups = groupBySeller(sellers)
   const address =
     addresses.find((a) => a.id === addressId) ??
-    // They already told us their pincode on Explore - default to the address
-    // that matches it rather than making their pick again.
+    // The customer already gave a pincode on Explore - default to the address
+    // that matches it rather than asking for the same thing twice.
     addresses.find((a) => a.pincode === savedPincode) ??
     addresses.find((a) => a.isDefault) ??
     addresses[0]
