@@ -55,9 +55,9 @@ ordersRouter.get('/:id', requireRole('seller', 'customer'), (req, res) => {
    * food needs to be able to ring the woman making it, and this route already
    * refuses anyone who is not one of the two parties, three lines up.
    *
-   * It used to be withheld until the seller ACCEPTED, which is exactly
-   * backwards - the gap between placing and accepting is the window in which a
-   * buyer most needs to reach them.
+   * It used to be withheld until she ACCEPTED, which is exactly backwards -
+   * the gap between placing and accepting is the window in which a buyer most
+   * needs to reach her.
    */
   const seller = db.sellers.find((s) => s.id === order.sellerId)
   res.json({
@@ -189,9 +189,8 @@ ordersRouter.post('/', requireRole('customer'), (req, res) => {
     if (order.sourceShareCode === seller.shopSlug) seller.qrOrders += 1
   }
 
-  // Remember who the seller is and where they asked for it. A cart split
-  // across three sellers is three orders but one customer, so this runs once
-  // on the first.
+  // Remember who she is and where she asked for it. A cart split across three
+  // sellers is three orders but one customer, so this runs once on the first.
   if (created[0]) recordOrderCustomer(db, created[0])
 
   save()
@@ -253,7 +252,7 @@ ordersRouter.post('/:id/advance', requireRole('seller'), (req, res) => {
   })
 
   // Cash is collected at the doorstep, so delivery and collection are the same
-  // moment. UPI is confirmed separately, by the seller, before them packs.
+  // moment. UPI is confirmed separately, by her, before she packs.
   if (to === 'DELIVERED' && order.paymentMode === 'COD') {
     order.paymentStatus = 'COD_COLLECTED'
   }

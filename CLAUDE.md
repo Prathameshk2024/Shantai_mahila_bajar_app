@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 शांताई महिला बाजार / Shantai Mahila Bazar — a digital marketplace for rural women entrepreneurs in Maharashtra. Three user-facing surfaces, one API:
 
 - **frontend/** — the seller + customer app (React/Vite, also shipped as a Capacitor APK)
-- **admin/** — they console (React/Vite, deployed separately)
+- **admin/** — the admin console (React/Vite, deployed separately)
 - **backend/** — Express API serving all three, including `/api/admin/*`
 - **shared/** — domain types and rules imported by all of the above
 
@@ -46,7 +46,7 @@ cd admin   && node --import tsx --test tests/i18n.test.ts
 
 Vite proxies `/api` to `localhost:4000`, so nothing needs configuring in development. Reseed by deleting `backend/data/db.json` or `POST /api/dev/reset` (404s in production).
 
-Demo logins: any 10-digit number, and the OTP screen **shows you the 6-digit code** — it is a real code that is really checked, so typing anything else is refused. Existing seller `9822011223` (Sunita, SMB-ANADUR-01). A customer phone with no name on record is authenticated but *not registered* — the app sends the seller to `/register/customer` to give one.
+Demo logins: any 10-digit number, and the OTP screen **shows you the 6-digit code** — it is a real code that is really checked, so typing anything else is refused. Existing seller `9822011223` (Sunita, SMB-ANADUR-01). A customer phone with no name on record is authenticated but *not registered* — the app sends her to `/register/customer` to give one.
 
 There is no default admin password any more. Make an account with `npm run admin:users -- create you@example.com "Your Name"`, or set `ADMIN_BOOTSTRAP_EMAIL` + `ADMIN_BOOTSTRAP_PASSWORD_HASH` on a host with no shell.
 
@@ -83,7 +83,7 @@ Firebase is **server-side only**, via `firebase-admin` with a service account. T
 
 `backend/src/auth/` is the whole stack; `middleware/auth.ts` composes it. The token is `base64url({sid, role, iat}).base64url(HMAC(payload))` signed with `SESSION_SECRET`.
 
-**The token carries no identity.** `sid` points at a row in the `sessions` collection, and `req.auth.sellerId` is read from that row on every request — so a token cannot assert an identity the server did not issue, and deleting the row revokes it instantly. That is what makes logout and "the seller's phone was stolen" real.
+**The token carries no identity.** `sid` points at a row in the `sessions` collection, and `req.auth.sellerId` is read from that row on every request — so a token cannot assert an identity the server did not issue, and deleting the row revokes it instantly. That is what makes logout and "her phone was stolen" real.
 
 - `auth/crypto.ts` is the only file that touches `node:crypto`. Every signature is **domain-separated by purpose**, so a registration ticket cannot be presented as a session token.
 - **Registration requires a ticket.** `/sellers/register` takes the phone out of a single-use, 15-minute ticket from `/auth/otp/verify` and *ignores the one in the body*. Without it the endpoint minted a seller session for any phone number anybody typed.
@@ -113,30 +113,30 @@ Locked at six states. **Payment is a separate axis, not a step** — a cash orde
 
 `PATCH /products/:id` is the only way a seller changes a listing after it exists, and it decides one thing: does the edit send the listing back to the admin queue?
 
-`MODERATED_FIELDS` in `products.routes.ts` is the split, and it is by **what the admin was actually looking at when they approved it** — name, picture, category, ingredients, veg/non-veg. Price, stock, unit, MRP and made-to-order are deliberately absent: they change constantly, and pulling a shop off the shelf every time they mark eight jars left instead of ten teaches they to stop keeping the stock honest. `touchesModeratedContent()` compares values rather than keys, because the edit form posts the whole product on every save.
+`MODERATED_FIELDS` in `products.routes.ts` is the split, and it is by **what the admin was actually looking at when they approved it** — name, picture, category, ingredients, veg/non-veg. Price, stock, unit, MRP and made-to-order are deliberately absent: they change constantly, and pulling a shop off the shelf every time she marks eight jars left instead of ten teaches her to stop keeping the stock honest. `touchesModeratedContent()` compares values rather than keys, because the edit form posts the whole product on every save.
 
 `DRAFT → PENDING` and `REJECTED → PENDING` are also allowed here — that is how a draft gets published — and both run the same `listingProblems()` check and slot gate as a new listing. A draft consumes no slot, so publishing one does. Without that gate "save as draft" would be the way around moderation.
 
-The screen is `frontend/src/screens/seller/EditProduct.tsx`, and it is deliberately **not** the wizard: one question per screen is right when the job is teaching the seller what a listing needs, and wrong when they came to fix one number. `isFood` is immutable — it picks the category set and stamps the FSSAI licence, so changing it re-files the product under a licence nobody checked it against.
+The screen is `frontend/src/screens/seller/EditProduct.tsx`, and it is deliberately **not** the wizard: one question per screen is right when the job is teaching her what a listing needs, and wrong when she came to fix one number. `isFood` is immutable — it picks the category set and stamps the FSSAI licence, so changing it re-files the product under a licence nobody checked it against.
 
 ### The upload wizard's draft
 
-A half-filled product is written to `localStorage` so that leaving the screen — most often to change the language from the seller's profile — does not throw the work away. `frontend/src/screens/seller/productDraft.ts` owns it.
+A half-filled product is written to `localStorage` so that leaving the screen — most often to change the language from her profile — does not throw the work away. `frontend/src/screens/seller/productDraft.ts` owns it.
 
 The key is `wb.draft.product.<sellerId>` and the seller id is **also stored inside the payload**. The first version used one shared key, and on a field coordinator's phone, where seller after seller registers on the same handset, the next woman opened "New product" and found a stranger's photo on step 1. Nothing is written until `hasStarted()` is true, so opening the wizard and walking away leaves no trace, and `readDraft` deletes the old unkeyed `wb.draft.product` on sight.
 
 ### Product photos
 
-`PhotoPicker` takes **one photo, from the gallery, and nothing else**. The camera button and the emoji fallback grid are both gone, so a photo is now required unless Cloudinary is off — the picker reports that upward through `onUnavailable` and the step stops being a wall the seller cannot pass. Once a photo is in, "choose from gallery" is disabled rather than silently replacing it; the ✕ on the thumbnail is the way to change it. The file input resets its own `value`, or removing a photo and picking the same file again fires no `change` event at all.
+`PhotoPicker` takes **one photo, from the gallery, and nothing else**. The camera button and the emoji fallback grid are both gone, so a photo is now required unless Cloudinary is off — the picker reports that upward through `onUnavailable` and the step stops being a wall she cannot pass. Once a photo is in, "choose from gallery" is disabled rather than silently replacing it; the ✕ on the thumbnail is the way to change it. The file input resets its own `value`, or removing a photo and picking the same file again fires no `change` event at all.
 
 ### Slots and subscription
 
-`shared/src/seller.ts`. ₹50 = one pack = 5 product slots, no payment gateway — the seller pays their UPI and admin approves by hand. `SLOT_CONSUMING` deliberately excludes `DRAFT` (so they can experiment before paying) and `ARCHIVED` (so archiving frees a slot immediately). Validation functions here run on **both** sides: the client for a fast friendly message, server because the client can lie.
+`shared/src/seller.ts`. ₹50 = one pack = 5 product slots, no payment gateway — she pays the admin's UPI and admin approves by hand. `SLOT_CONSUMING` deliberately excludes `DRAFT` (so she can experiment before paying) and `ARCHIVED` (so archiving frees a slot immediately). Validation functions here run on **both** sides: the client for a fast friendly message, the server because the client can lie.
 
 ### Other shared modules
 
 - `womenbiz.ts` — the `SMB-<VILLAGE>-<NN>` ID. The serial is **per village**, not global, so the code tells a field coordinator where to go. Non-survey villages are transliterated from Devanagari.
-- `readiness.ts` — Digital Readiness Index. Six factors self-reported at registration (the day-one baseline), four **measured by the platform** from what the seller actually does. Keep that split; it is what makes the before/after comparison meaningful.
+- `readiness.ts` — Digital Readiness Index. Six factors self-reported at registration (the day-one baseline), four **measured by the platform** from what she actually does. Keep that split; it is what makes the before/after comparison meaningful.
 
 ### Config and graceful degradation
 
@@ -163,7 +163,7 @@ From spec section 6, encoded in `frontend/src/styles/theme.css`:
 - Status is colour **+ icon + word**, never colour alone. Every icon carries a word.
 - 16px minimum text, 56px buttons, 44px touch targets.
 - Four bottom tabs, one level deep. **No hamburger menu.**
-- One question per screen in wizards, with progress dots. **Editing is not a wizard** — `EditProduct` puts every field on one page, because four taps between the seller and a price they came to change is not simplicity.
+- One question per screen in wizards, with progress dots. **Editing is not a wizard** — `EditProduct` puts every field on one page, because four taps between her and a price she came to change is not simplicity.
 - Confirmation dialogs state the consequence, never a bare "Are you sure?"
 - Latin digits (₹500, not ५००) — that is what is printed on money.
 - **No web fonts.** Android ships Noto Sans Devanagari, so Marathi renders from system fonts at zero network cost and the APK works offline.

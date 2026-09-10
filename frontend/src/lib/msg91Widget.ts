@@ -18,9 +18,9 @@
  * buttons, Marathi first — so we take the three methods and keep our own OTP
  * screen.
  *
- * With no widget configured every function here is unreachable:
- * `widgetEnabled` is false and Auth.tsx stays on the server-side code path,
- * which is what a fresh clone with no MSG91 account runs.
+ * With no widget configured every function here is unreachable: `widgetEnabled`
+ * is false and Auth.tsx stays on the server-side code path, which is what a
+ * fresh clone with no MSG91 account runs.
  */
 
 const WIDGET_ID = import.meta.env?.VITE_MSG91_WIDGET_ID
@@ -34,8 +34,8 @@ export const widgetEnabled = Boolean(WIDGET_ID && TOKEN_AUTH)
  * How many digits MSG91 sends, from the widget's own dashboard setting.
  *
  * It is configurable there, and a mismatch is silent and total: our OTP boxes
- * would never fill, so the verify button would never enable and the seller
- * could not log in at all. Cheaper as one variable than as a support call.
+ * would never fill, so the verify button would never enable and she could not
+ * log in at all. Cheaper as one variable than as a support call.
  */
 export const widgetOtpLength = Number(import.meta.env?.VITE_MSG91_OTP_LENGTH) || 6
 
@@ -51,7 +51,7 @@ declare global {
   }
 }
 
-/** Loaded once per page, however many times the seller goes back and forth. */
+/** Loaded once per page, however many times she goes back and forth. */
 let loading: Promise<void> | null = null
 
 /**
@@ -59,14 +59,12 @@ let loading: Promise<void> | null = null
  * =================================
  * MSG91 keeps its OTP session - the reqId - in page memory, and the phone
  * screen and the OTP screen are two routes. Any reload between them loses it,
- * and then every code the seller types comes back "reqId is required.", which
- * reaches they as "that OTP is wrong" and sends them back to the keypad for
- * ever.
+ * and then every code she types comes back "reqId is required.", which reaches
+ * her as "that OTP is wrong" and sends her back to the keypad for ever.
  *
  * A reload there is not exotic: HMR does it in development, a dropped
  * connection does it, and Android does it to a tab that was backgrounded while
- * the seller went to read the SMS - which is the one thing this screen asks
- * them to do.
+ * she went to read the SMS - which is the one thing this screen asks her to do.
  *
  * Nothing recovers a lost reqId, so the only honest answer is a fresh send.
  * Remembering the number this page sent to is what lets "send again" be that.
@@ -74,9 +72,8 @@ let loading: Promise<void> | null = null
 let sentTo: string | null = null
 
 /**
- * Thrown when the widget has no session for the code the seller is typing.
- * Auth.tsx matches on it to point they at "send again" rather than at the
- * keypad.
+ * Thrown when the widget has no session for the code she is typing. Auth.tsx
+ * matches on it to point her at "send again" rather than at the keypad.
  */
 export const WIDGET_SESSION_LOST = 'msg91-widget-session-lost'
 
@@ -152,7 +149,7 @@ function loadWidget(): Promise<void> {
     script.onerror = () => {
       // Let the next attempt try again rather than caching the failure for the
       // life of the page — on a village connection one dropped script must not
-      // mean the seller can never log in without a full reload.
+      // mean she can never log in without a full reload.
       loading = null
       reject(new Error('MSG91 widget script failed to load'))
     }
@@ -224,7 +221,7 @@ export async function sendWidgetOtp(phone: string): Promise<void> {
  *
  * `retryOtp` needs the same reqId `verifyOtp` does, so after a reload it fails
  * exactly the way verifying does. A fresh send is the only way back, and this
- * is already the button the seller is looking at when it happens.
+ * is already the button she is looking at when it happens.
  */
 export async function retryWidgetOtp(phone: string): Promise<void> {
   if (sentTo !== phone) {
@@ -239,12 +236,12 @@ export async function retryWidgetOtp(phone: string): Promise<void> {
  * Check the code with MSG91 and return the access token.
  *
  * The token is what goes to our own /auth/otp/verify. Getting one here means
- * MSG91 accepted the code — it does not mean the seller is signed in, and
- * nothing in this file should ever be read as if it did.
+ * MSG91 accepted the code — it does not mean she is signed in, and nothing in
+ * this file should ever be read as if it did.
  */
 export async function verifyWidgetOtp(code: string): Promise<string> {
   // No send from THIS page load means MSG91 has nothing to check the code
-  // against, however right the six digits in their hand are.
+  // against, however right the six digits in her hand are.
   if (!sentTo) throw new Error(WIDGET_SESSION_LOST)
 
   await loadWidget()

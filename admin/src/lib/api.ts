@@ -7,7 +7,7 @@ import type {
  *
  * Same backend as the seller app - in development Vite proxies /api to
  * localhost:4000, in production VITE_API_URL points at the Render service.
- * Every call carries they bearer token; the API rejects anything else
+ * Every call carries the admin bearer token; the API rejects anything else
  * with 401 at `adminRouter.use(requireRole('admin'))`.
  */
 
@@ -238,12 +238,12 @@ export const api = {
   grantSlots: (id: string, packs: number) =>
     post<{ seller: Seller }>(`/admin/sellers/${id}/grant-slots`, { packs }),
 
-  /** Takes packs back. Refused by the server if it would drop the seller below the
-   *  slots they are already using. */
+  /** Takes packs back. Refused by the server if it would drop her below the
+   *  slots she is already using. */
   revokeSlots: (id: string, packs: number) =>
     post<{ seller: Seller }>(`/admin/sellers/${id}/revoke-slots`, { packs }),
 
-  /** The reason is shown to the seller in their own app, so it is not optional noise. */
+  /** The reason is shown to her in her own app, so it is not optional noise. */
   blockSeller: (id: string, blocked: boolean, reason?: string) =>
     post<{ seller: Seller }>(`/admin/sellers/${id}/block`, { blocked, reason }),
 

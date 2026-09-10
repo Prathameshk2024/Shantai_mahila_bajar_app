@@ -16,9 +16,9 @@ import { IconCall, IconCheck, IconMap, IconOrders } from '../../components/icons
 
 const TABS: { id: string; labelKey: string; statuses?: OrderStatus[] }[] = [
   { id: 'action', labelKey: 'biz.needsAction' },
-  // ACCEPTED, PACKED and OUT_FOR_DELIVERY are one tab: from the seller's side
-  // they are the same order, in hand and not yet delivered. Splitting them
-  // gave three tabs that were each empty most of the time.
+  // ACCEPTED, PACKED and OUT_FOR_DELIVERY are one tab: from her side they are
+  // the same order, in hand and not yet delivered. Splitting them gave three
+  // tabs that were each empty most of the time.
   { id: 'accepted', labelKey: 'ord.accepted', statuses: ['ACCEPTED', 'PACKED', 'OUT_FOR_DELIVERY'] },
   { id: 'done', labelKey: 'ord.delivered', statuses: ['DELIVERED'] },
   { id: 'cancelled', labelKey: 'ord.cancelled', statuses: ['REJECTED', 'CANCELLED'] },
@@ -125,8 +125,8 @@ export function SellerOrderDetail() {
       const res = await api.advanceOrder(order.id, action.to, extra)
       setData({ ...data!, order: res.order })
       setRejectOpen(false)
-      // Names the state the seller just moved it to, not a generic "saved" -
-      // the whole doubt on this screen is which step the order is on now.
+      // Names the state she just moved it to, not a generic "saved" - the
+      // whole doubt on this screen is which step the order is on now.
       toast(`${t('ok.orderUpdated')}: ${t(statusLabelKey(res.order.status))}`)
     } catch (e) {
       if (e instanceof ApiError) setActionErr(e.messageMr ?? e.message)

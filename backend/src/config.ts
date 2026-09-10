@@ -161,8 +161,8 @@ export const usingCloudinary = cloudinary !== null
 
 /**
  * The key session tokens are signed with. Sessions carry a customer id, and a
- * customer id now unlocks the seller's saved home addresses - so an unsigned
- * token would let anyone read anyone's address by editing a base64 string.
+ * customer id now unlocks her saved home addresses - so an unsigned token
+ * would let anyone read anyone's address by editing a base64 string.
  *
  * Development gets a fixed fallback so the repo still runs with no .env at
  * all. Production does not: booting with a known key would be the same as
@@ -202,11 +202,11 @@ export const SEED_DEMO_DATA = /^(1|true|yes)$/i.test(firstOf('SEED_DEMO_DATA') ?
 /**
  * Which browser origins may call this API.
  *
- * Two front ends share one backend - the seller/customer app and they site,
- * deployed separately - so this has to be a LIST. An environment variable is a
- * single string, and handing "https://a.vercel.app,https://b.vercel.app"
- * straight to `cors()` makes it one literal origin that matches neither,
- * blocking both sites at once.
+ * Two front ends share one backend - the seller/customer app and the admin
+ * site, deployed separately - so this has to be a LIST. An environment
+ * variable is a single string, and handing
+ * "https://a.vercel.app,https://b.vercel.app" straight to `cors()` makes it one
+ * literal origin that matches neither, blocking both sites at once.
  *
  * Unset means "any origin", which is what lets a fresh clone run with no
  * configuration at all. In production that is too open, so index.ts warns.

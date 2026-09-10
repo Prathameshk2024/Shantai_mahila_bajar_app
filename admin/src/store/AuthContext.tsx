@@ -65,9 +65,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(() => {
     // Tell the server first - the request reads the token before it is
-    // cleared. Not awaited: the seller must end up signed out on this desk
-    // whether or not the network cooperates, and the session idles out on its
-    // own.
+    // cleared. Not awaited: she must end up signed out on this desk whether or
+    // not the network cooperates, and the session idles out on its own.
     void api.logout().catch(() => {
       /* offline - nothing more this side can do */
     })

@@ -113,10 +113,9 @@ export type BusinessType = 'individual' | 'shg' | 'udyam'
 export type DispatchTime = 'same' | '1' | '23'
 
 /**
- * The six digital-usage answers behind the Shanta Mahila Bazar Digital
- * Readiness Index. Collected once at registration and re-measured after
- * training, so the before/after comparison the research design needs is
- * possible at all.
+ * The six digital-usage answers behind the Shanta Mahila Bazar Digital Readiness Index.
+ * Collected once at registration and re-measured after training, so the
+ * before/after comparison the research design needs is possible at all.
  */
 export interface DigitalProfile {
   smartphone: boolean
@@ -130,13 +129,12 @@ export interface DigitalProfile {
 /**
  * SOMETHING AN ADMIN DID TO HER ACCOUNT.
  *
- * Every other line in the seller's updates list is derived from an order,
- * because the order already records what happened and when. An admin decision
- * leaves no such trail: a granted pack is a number that is simply larger than
- * it was, so "you were given 5 more slots, on Tuesday" cannot be reconstructed
- * after the fact. This is the smallest thing that can be: an append-only list
- * on their own record, trimmed, written by the same handler that made the
- * change.
+ * Every other line in her updates list is derived from an order, because the
+ * order already records what happened and when. An admin decision leaves no
+ * such trail: a granted pack is a number that is simply larger than it was, so
+ * "you were given 5 more slots, on Tuesday" cannot be reconstructed after the
+ * fact. This is the smallest thing that can be: an append-only list on her own
+ * record, trimmed, written by the same handler that made the change.
  */
 export type AdminNoticeKind =
   | 'SLOTS_GRANTED'
@@ -154,7 +152,7 @@ export interface AdminNotice {
   kind: AdminNoticeKind
   /** Slots, where the sentence carries a number. Slots, not packs - a pack is our word. */
   n?: number
-  /** A reason, or the product's name. Shown to the seller as written, so keep it plain. */
+  /** A reason, or the product's name. Shown to her as written, so keep it plain. */
   note?: string
 }
 
@@ -185,14 +183,14 @@ export interface Seller {
   businessType: BusinessType
   shgName?: string
   yearsInBusiness?: number
-  /** Units the seller can make per month. Drives what admin can realistically promise. */
+  /** Units she can make per month. Drives what admin can realistically promise. */
   monthlyCapacity?: number
   sellsFood: boolean
 
-  // money in. `upiId` is collected at registration because the seller cannot
-  // be paid without it. The payment QR is a SEPARATE, later step: it is
-  // generated from that UPI ID (or they upload their bank's own QR image), and
-  // `upiQrReady` records that they have actually been through that step.
+  // money in. `upiId` is collected at registration because she cannot be paid
+  // without it. The payment QR is a SEPARATE, later step: it is generated from
+  // that UPI ID (or she uploads her bank's own QR image), and `upiQrReady`
+  // records that she has actually been through that step.
   upiId: string
   upiVerified: boolean
   upiQrUrl?: string
@@ -215,14 +213,14 @@ export interface Seller {
   // platform
   status: SellerStatus
   /**
-   * When an admin blocked the seller, and why. Their own screens read these to
-   * tell they what happened - a blocked seller who is simply shown an empty
-   * shop has no idea whether the app is broken or they have been removed.
+   * When an admin blocked her, and why. Her own screens read these to tell
+   * her what happened - a blocked seller who is simply shown an empty shop
+   * has no idea whether the app is broken or she has been removed.
    */
   blockedAt?: string
   blockReason?: string
   packsApproved: number
-  /** Admin decisions about their account, newest last. Trimmed on write. */
+  /** Admin decisions about her account, newest last. Trimmed on write. */
   notices?: AdminNotice[]
   rating: number
   ratingCount: number
@@ -279,7 +277,7 @@ export interface Product {
   /**
    * When an admin rejected it. A rejected listing is removed automatically
    * 48 hours later (see shared/src/moderation.ts) - the stamp is what that
-   * clock counts from, and what the seller's app counts down to.
+   * clock counts from, and what her app counts down to.
    */
   rejectedAt?: string
   views: number
@@ -348,17 +346,17 @@ export interface Address {
 /**
  * A customer, keyed by phone number.
  *
- * The seller's addresses live inside this document rather than in a collection
- * of their own. They have two or three, they are only ever read alongside the
- * rest of them record, and embedding keeps a checkout write atomic instead of
- * split across two documents.
+ * Her addresses live inside this document rather than in a collection of their
+ * own. She has two or three, they are only ever read alongside the rest of her
+ * record, and embedding keeps a checkout write atomic instead of split across
+ * two documents.
  *
  * Deliberately absent: order counts and spending totals. Those are derived
  * from `orders` when they are needed. A stored counter goes wrong the first
  * time an order is cancelled, and goes wrong silently.
  */
 export interface Customer {
-  /** `c-<phone>` - derived, so it always matches the id inside the seller's token. */
+  /** `c-<phone>` - derived, so it always matches the id inside her token. */
   id: string
   phone: string
   name: string

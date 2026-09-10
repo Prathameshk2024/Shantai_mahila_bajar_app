@@ -110,9 +110,9 @@ export default function MyProducts() {
                     <span className="tile-tap__go" aria-hidden="true"><IconEdit /></span>
                   </button>
 
-                  {/* Rejected is not deleted. The seller reads why, and how long the
+                  {/* Rejected is not deleted. She reads why, and how long the
                       listing stays before it removes itself - so a product
-                      disappearing is something the seller was told about first. */}
+                      disappearing is something she was told about first. */}
                   {p.status === 'REJECTED' && (
                     <div style={{ marginTop: 'var(--s3)' }}>
                       <Notice tone="danger" title={t('prod.rejected')}>

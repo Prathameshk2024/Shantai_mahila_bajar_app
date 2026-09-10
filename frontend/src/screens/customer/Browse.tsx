@@ -285,10 +285,10 @@ export function ProductDetail() {
 }
 
 /**
- * Who made this. Not a link any more - the public storefront it opened was the
- * landing page for the share QR, and that whole surface is gone. The
- * customer's name, their village and SMB ID still belong on the product,
- * because they are what a buyer is choosing between.
+ * Who made this. Not a link any more - the public storefront it opened was
+ * the landing page for the share QR, and that whole surface is gone. Her name,
+ * her village and her SMB ID still belong on the product, because they are
+ * what a buyer is choosing between.
  */
 function SellerCard({ seller }: { seller: Partial<Seller> }) {
   const t = useT()

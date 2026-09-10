@@ -57,9 +57,9 @@ export function setToken(token: string | null): void {
  *    `X-Session-Token`. That landed in `wb.token` only. On the next reload
  *    AuthContext wrote the ORIGINAL token back over it, so the window never
  *    actually slid and a seller was signed out exactly seven days after login
- *    however much the seller had used the app in between;
+ *    however much she had used the app in between;
  *  - a 401 cleared `wb.token` and left `wb.session` sitting there, so the UI
- *    still believed they were signed in while every request failed.
+ *    still believed she was signed in while every request failed.
  *
  * So the two events that change a session are published here, and AuthContext
  * is the one place that acts on them. Nothing else clears a session - not a
@@ -151,8 +151,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // 401 means the SERVER rejected this token - expired, or signed with a
   // different secret. `requireRole` answers 403 for the wrong role, so this is
   // never "not allowed here"; it is "there is no session any more". Telling
-  // AuthContext is the only way the seller gets back to the phone screen
-  // instead of tapping a shop that answers 401 to everything.
+  // AuthContext is the only way she gets back to the phone screen instead of
+  // tapping a shop that answers 401 to everything.
   if (res.status === 401 && token) {
     setToken(null)
     for (const fn of expiryListeners) fn()
@@ -179,10 +179,9 @@ export const api = {
 
   /**
    * `registered` and `session` are independent on purpose. A customer whose
-   * OTP checked out is authenticated - the seller gets a session - but they
-   * are not registered until they have given us a name, so both come back
-   * together and the caller decides where they lands. A seller with no record
-   * gets
+   * OTP checked out is authenticated - she gets a session - but she is not
+   * registered until she has given us a name, so both come back together and
+   * the caller decides where she lands. A seller with no record gets
    * `registered: false` and no session, because there is nothing to sign in to
    * until the wizard has run.
    */
@@ -232,7 +231,7 @@ export const api = {
   updateMe: (patchBody: Partial<Seller>) =>
     patch<{ seller: Seller }>('/sellers/me', patchBody),
 
-  /** The seller's buyers, derived from their own orders. Never anybody else's. */
+  /** Her buyers, derived from her own orders. Never anybody else's. */
   myBuyers: () => get<{ buyers: SellerBuyer[] }>('/sellers/me/buyers'),
 
   sellerById: (id: string) => get<{ seller: Seller }>(`/sellers/${id}`),
@@ -289,10 +288,10 @@ export const api = {
       nearbyVillages: string[]
     }>(`/catalog/serviceability?pincode=${encodeURIComponent(pincode)}`),
 
-  /* ---------------- the seller's own record ---------------- */
+  /* ---------------- her own record ---------------- */
 
   /**
-   * The seller's customer record, addresses included. Created empty on first call.
+   * Her customer record, addresses included. Created empty on first call.
    *
    * This replaced `addresses()`, which hit an unauthenticated endpoint and
    * returned the same two seeded addresses to everybody.

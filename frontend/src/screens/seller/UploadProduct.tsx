@@ -24,7 +24,7 @@ const UNITS: Unit[] = ['kg', 'g', 'piece', 'dozen', 'litre', 'ml', 'set']
 const STEPS = ['photo', 'basics', 'food', 'details', 'price', 'stock', 'preview'] as const
 
 /**
- * The upload wizard. One question per screen, one photo from the seller's gallery.
+ * The upload wizard. One question per screen, one photo from her gallery.
  *
  * Step 3 is the branch everything depends on: food asks for the ingredients
  * and veg/non-veg, non-food asks what it is made of. Every extra field is a
@@ -57,7 +57,7 @@ export default function UploadProduct() {
   const [serverError, setServerError] = useState('')
 
   /* Set when Cloudinary is off. There is nothing else to ask for then, so the
-     photo step stops being a wall the seller cannot get past. */
+     photo step stops being a wall she cannot get past. */
   const [photoOff, setPhotoOff] = useState(false)
 
   const [d, setD] = useState<Draft>(restored?.d ?? BLANK)
@@ -166,10 +166,10 @@ export default function UploadProduct() {
 
   /**
    * Backwards never validates and never clears a field - `d` is one object
-   * that outlives every step - so the seller can go back from the preview,
-   * change the price, and come forward to find everything else exactly as they
-   * left it. The error markers are cleared, because a red box on a screen they
-   * are only revisiting reads as a new mistake.
+   * that outlives every step - so she can go back from the preview, change the
+   * price, and come forward to find everything else exactly as she left it.
+   * The error markers are cleared, because a red box on a screen she is only
+   * revisiting reads as a new mistake.
    */
   function goToStep(target: number) {
     setErrors({})
@@ -330,8 +330,8 @@ export default function UploadProduct() {
                   placeholder={t('ph.material')}
                 />
                 <div className="wrap-row" style={{ marginTop: 'var(--s2)' }}>
-                  {/* The word the seller taps is the word that gets stored, so it
-                      follows the language they are reading in. */}
+                  {/* The word she taps is the word that gets stored, so it
+                      follows the language she is reading in. */}
                   {['cotton', 'silk', 'wool', 'clay', 'wood', 'brass', 'bamboo', 'jute'].map((m) => (
                     <button
                       key={m}
@@ -400,7 +400,7 @@ export default function UploadProduct() {
               />
             </Field>
 
-            {/* The other honest answer: the seller makes it when the order comes. */}
+            {/* The other honest answer: she makes it when the order comes. */}
             <Choice
               selected={d.madeToOrder}
               onSelect={() => set('madeToOrder', !d.madeToOrder)}
@@ -417,7 +417,7 @@ export default function UploadProduct() {
             <div className="section-title">{t('prod.preview')}</div>
             <p className="small muted" style={{ margin: 0 }}>{t('reg.reviewHint')}</p>
 
-            {/* Straight back to the screen that asked, with everything the seller has
+            {/* Straight back to the screen that asked, with everything she has
                 already typed still in place. */}
             <div className="wrap-row">
               {([
@@ -477,8 +477,8 @@ export default function UploadProduct() {
               {t('prod.willUseSlot', { used: slots.used + 1, total: slots.total })}
             </Notice>
 
-            {/* Said at the moment the seller commits, not buried in a policy page.
-                Publishing is their now; this is the other half of that. */}
+            {/* Said at the moment she commits, not buried in a policy page.
+                Publishing is hers now; this is the other half of that. */}
             <Notice tone="warn">{t('prod.responsibility')}</Notice>
 
             {serverError && <Notice tone="danger">{serverError}</Notice>}

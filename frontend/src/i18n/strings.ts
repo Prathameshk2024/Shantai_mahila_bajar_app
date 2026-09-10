@@ -52,7 +52,7 @@ const mr: Record<string, string> = {
   'ok.otpSent': 'OTP पाठवला',
   'ok.qrSaved': 'पेमेंट QR जतन झाला',
 
-  // ---- what happened while the seller was away --------------------------------
+  // ---- what happened while she was away --------------------------------
   'notif.title': 'सूचना',
   'notif.new': 'नवीन',
   'notif.unread': '{n} नवीन सूचना',
@@ -60,7 +60,7 @@ const mr: Record<string, string> = {
   'notif.noneSub': 'तुमच्या ऑर्डरमध्ये बदल झाला की तो इथे दिसेल.',
 
   /* Updates are read by a person, not by the state machine: a whole
-     sentence about HER order, in the seller's own direction of the transaction. */
+     sentence about HER order, in her own direction of the transaction. */
   'notif.cus.ACCEPTED': 'तुमची ऑर्डर स्वीकारली आहे',
   'notif.cus.PACKED': 'तुमची ऑर्डर तयार झाली आहे',
   'notif.cus.OUT_FOR_DELIVERY': 'तुमची ऑर्डर पोहोचवायला निघाली आहे',
@@ -75,7 +75,7 @@ const mr: Record<string, string> = {
   'pay.notNeededSub': 'तुमच्याकडे अजून {n} जागा शिल्लक आहेत. त्या भरल्यावर ₹50 भरून आणखी 5 जागा घ्या.',
   'prod.rejectedRemovalIn': 'आणखी {n} तासांनी हे उत्पादन काढून टाकले जाईल',
 
-  /* What the office did to the seller's account. Slots, not packs - a pack is our word. */
+  /* What the office did to her account. Slots, not packs - a pack is our word. */
   'notif.adm.SLOTS_GRANTED': 'तुम्हाला {n} नवीन जागा मिळाल्या आहेत',
   'notif.adm.SLOTS_REVOKED': 'तुमच्या {n} जागा काढून घेतल्या आहेत',
   'notif.adm.PAYMENT_APPROVED': 'तुमचा ₹50 चा भरणा मंजूर झाला — {n} जागा मिळाल्या',
@@ -129,9 +129,8 @@ const mr: Record<string, string> = {
   // ---- landing: how it works / why / categories / cta -------------------
   'lp.loginShort': 'लॉगिन',
   // The Marathi tagline rhymes on purpose - गावाची / जगाची. A line that scans
-  // is a line the seller repeats to a neighbour, which is how this app spreads
-  // in a village. The English line below is deliberately NOT a translation of
-  // it.
+  // is a line she repeats to a neighbour, which is how this app spreads in a
+  // village. The English line below is deliberately NOT a translation of it.
   'lp.heroA': 'कला तुमच्या गावाची,',
   'lp.heroB': 'बाजारपेठ डिजिटल जगाची.',
   'lp.heroLede': 'पापड, लोणची, मसाले, हस्तकला — गावातल्या महिला उत्तम वस्तू बनवतात. शांताई महिला बाजार त्या वस्तू थेट ग्राहकांपर्यंत पोहोचवतो. मधले दलाल नाहीत, पैसे थेट तिच्या खात्यात.',

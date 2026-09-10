@@ -29,11 +29,10 @@ import type { Db } from './seed.js'
 
 /**
  * `addresses` is deliberately absent. It used to hold two seeded demo
- * addresses that every customer was shown as if they were the customer's own;
- * addresses now live inside each customer document. Dropping the name from
- * this list stops the collection being read or diffed - the existing documents
- * are left in Firestore untouched, so restoring this entry is the whole
- * rollback.
+ * addresses that every customer was shown as if they were her own; addresses
+ * now live inside each customer document. Dropping the name from this list
+ * stops the collection being read or diffed - the existing documents are left
+ * in Firestore untouched, so restoring this entry is the whole rollback.
  */
 const COLLECTIONS = [
   'sellers', 'products', 'orders', 'payments', 'customers',

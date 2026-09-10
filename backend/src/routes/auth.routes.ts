@@ -100,8 +100,7 @@ authRouter.post('/otp/send', async (req, res) => {
 
   // Both keys, always. Per-phone alone lets somebody walk through numbers to
   // burn the SMS budget; per-IP alone punishes a whole village behind one
-  // carrier NAT, which here is a real shape of traffic rather than an edge
-  // case.
+  // carrier NAT, which here is a real shape of traffic rather than an edge case.
   if (over(res, `otp:send:ip:${ip}`, LIMITS.otpSendPerIp)) {
     recordAuthEvent(getDb(), { type: 'ratelimit', ip, detail: 'otp.send ip' })
     save()
@@ -165,15 +164,15 @@ authRouter.post('/otp/verify', async (req, res) => {
   const client = describeClient(req.headers['user-agent'])
 
   if (role === 'seller') {
-    // Normalised on both sides: records stored before this fix may hold '98765
-    // 43210' or '+91...', and the seller is not registering a second time.
+    // Normalised on both sides: records stored before this fix may hold
+    // '98765 43210' or '+91...', and she is not registering a second time.
     const seller = db.sellers.find((s) => samePhone(s.phone, phone))
 
     if (!seller) {
       /**
-       * No seller record yet. The seller is verified but has nothing to sign
-       * in to, so instead of a session they get a TICKET - short-lived,
-       * single-use proof that this phone passed an OTP just now.
+       * No seller record yet. She is verified but has nothing to sign in to,
+       * so instead of a session she gets a TICKET - short-lived, single-use
+       * proof that this phone passed an OTP just now.
        *
        * /sellers/register demands it and reads the phone out of it. Before the
        * ticket existed, registration took a phone number straight from the
@@ -214,18 +213,18 @@ authRouter.post('/otp/verify', async (req, res) => {
 
   /**
    * The phone is still the customer's account - the id is derived from it, not
-   * allocated - but a verified phone alone is not a registration. They also
-   * has to have given us a name, because that name is what they read on the
-   * order and what they are called when they are phoned about a delivery.
+   * allocated - but a verified phone alone is not a registration. She also has
+   * to have given us a name, because that name is what the seller reads on the
+   * order and what she is called when she is phoned about a delivery.
    *
-   * The session is issued either way (the seller IS authenticated - the OTP is
-   * the proof, and the name step needs a token to write with), and
-   * `registered` tells the client whether to send them to /shop or to the
-   * one-field registration screen.
+   * The session is issued either way (she IS authenticated - the OTP is the
+   * proof, and the name step needs a token to write with), and `registered`
+   * tells the client whether to send her to /shop or to the one-field
+   * registration screen.
    *
    * The record is deliberately NOT created here. `ensureCustomer` would make
-   * an empty row that answers `registered: true` for ever after, and the
-   * seller would never be asked their name at all.
+   * an empty row that answers `registered: true` for ever after, and she would
+   * never be asked her name at all.
    */
   const customerId = customerIdFor(phone)
   const registered = isRegisteredCustomer(db, customerId)
@@ -285,7 +284,7 @@ authRouter.post('/logout', (req: Request, res: Response) => {
 })
 
 /* ------------------------------------------------------------------ */
-/* The seller's own signed-in devices                                           */
+/* Her own signed-in devices                                           */
 /* ------------------------------------------------------------------ */
 
 /** What "you are signed in on three phones" needs, and nothing about anyone else. */
