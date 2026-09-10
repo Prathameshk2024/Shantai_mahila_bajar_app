@@ -32,7 +32,7 @@ export function SellerProfile() {
   const [logoutOpen, setLogoutOpen] = useState(false)
 
   if (loading || !me) {
-    return <><AppBar title={t('prof.title')} /><div className="screen"><Loading /></div></>
+    return <><AppBar brand title={t('prof.title')} /><div className="screen"><Loading /></div></>
   }
 
   const seller = me.seller
@@ -40,7 +40,7 @@ export function SellerProfile() {
 
   return (
     <>
-      <AppBar title={t('prof.title')} />
+      <AppBar brand title={t('prof.title')} />
       <div className="screen stack">
         <Card>
           <div className="row">
@@ -200,7 +200,7 @@ export function SellerHelp() {
 
   return (
     <>
-      <AppBar title={t('help.title')} />
+      <AppBar brand title={t('help.title')} />
       <div className="screen stack">
         {/* Her own screens first: a walkthrough runs on the real page,
             which is the fastest answer to "how do I do this". */}

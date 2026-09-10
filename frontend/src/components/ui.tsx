@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { useI18n, useT } from '../i18n/I18nProvider.js'
 import { useVoiceInput } from '../lib/useVoiceInput.js'
 import NotificationBell from './NotificationBell.js'
+import logo from '../assets/logo.png'
 import { useToast } from '../store/ToastContext.js'
 import {
   IconBack, IconCheck, IconCopy, IconEmpty, IconMic,
@@ -42,13 +43,21 @@ export function Button({
 /* ================================================================== */
 
 export function AppBar({
-  title, sub, onBack, right, backTo, bell = true,
+  title, sub, onBack, right, backTo, bell = true, brand = false,
 }: {
   title: ReactNode
   sub?: ReactNode
   onBack?: () => void
   right?: ReactNode
   backTo?: string
+  /**
+   * शांताबाई's portrait beside the title. On the screens she arrives at - the
+   * four tabs and the phone/OTP doors - and nowhere deeper, because a detail
+   * screen already told her where she is and the header space belongs to the
+   * back button and the title. The mark carries its own gold ring; never add
+   * a border or a background here or it prints a second one.
+   */
+  brand?: boolean
   /**
    * The notification bell, on by default.
    *
@@ -72,6 +81,7 @@ export function AppBar({
           <IconBack aria-hidden="true" />
         </button>
       )}
+      {brand && <img className="appbar__mark" src={logo} alt="" aria-hidden="true" />}
       <h1 className="appbar__title">
         {title}
         {sub && <span className="appbar__sub">{sub}</span>}

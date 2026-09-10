@@ -1,17 +1,19 @@
 import { useMemo, useState } from 'react'
-import type { SellerStatus } from '@shared/types.js'
-import { PLAN } from '@shared/seller.js'
+import { Link } from 'react-router-dom'
 import { useT } from '../i18n/I18nProvider.js'
-import { IconSellers } from '../components/icons.js'
+import { IconGo, IconSellers } from '../components/icons.js'
 import { api, type SellerRow } from '../lib/api.js'
 import { TopBar } from '../components/Shell.js'
-import { Confirm, PackPicker, useConfirm } from '../components/Confirm.js'
+import { SellerActions, StatusPill } from '../components/SellerActions.js'
 import {
-  Button, Card, CopyValue, EmptyState, ErrorNote, Loading, Pill, useAsync, useErrorText,
+  Button, Card, CopyValue, EmptyState, ErrorNote, Loading, useAsync,
 } from '../components/ui.js'
 
 /**
  * The register of women on the programme.
+ *
+ * A line each, and no more: it is read by scanning, so the row answers "who is
+ * this and is anything wrong" and leaves everything else to her own page.
  *
  * Nothing here deletes anybody, and nothing here happens on a single click.
  * Every action changes what a real woman can do tomorrow - her slot
@@ -62,53 +64,14 @@ export function Sellers() {
   )
 }
 
-type Action = 'grant' | 'revoke' | 'block' | null
-
 function SellerCard({ seller, onDone }: { seller: SellerRow; onDone: () => void }) {
   const t = useT()
-  const errorText = useErrorText()
-  const c = useConfirm()
-
-  const [action, setAction] = useState<Action>(null)
-  const [packs, setPacks] = useState(1)
-  const [blockReason, setBlockReason] = useState('')
-
-  const blocked = seller.status === 'BLOCKED'
   const used = seller.slots?.used ?? 0
-  const slotsPerPack = PLAN.slotsPerPack
-
-  function ask(next: Exclude<Action, null>) {
-    setAction(next)
-    setPacks(1)
-    setBlockReason('')
-    c.ask()
-  }
-
-  function close() {
-    setAction(null)
-    c.close()
-  }
-
-  async function run(fn: () => Promise<unknown>) {
-    c.setBusy(true)
-    c.setError('')
-    try {
-      await fn()
-      close()
-      onDone()
-    } catch (e) {
-      // Stays open on failure: the server refuses a revoke that would drop her
-      // below the slots she is using, and that message is the whole point.
-      c.setError(errorText(e))
-    } finally {
-      c.setBusy(false)
-    }
-  }
 
   return (
     <Card>
       <div className="row wrap" style={{ gap: 12, alignItems: 'flex-start' }}>
-        <div className="grow">
+        <div className="grow min0">
           <div className="row wrap" style={{ gap: 8 }}>
             {/* Her name and shop name exactly as she entered them. */}
             <span className="strong">{seller.name}</span>
@@ -142,92 +105,20 @@ function SellerCard({ seller, onDone }: { seller: SellerRow; onDone: () => void 
           )}
         </div>
 
-        <div className="row wrap">
-          <Button variant="quiet" small disabled={c.open} onClick={() => ask('grant')}>
-            + {t('se.grantSlots')}
+        {/* Everything the row has no space for - her business, her shop
+            settings, her listings, her orders - is one click away. */}
+        <Link to={`/sellers/${seller.id}`}>
+          <Button variant="quiet" small>
+            {t('sd.open')} <IconGo aria-hidden="true" />
           </Button>
-          <Button variant="quiet" small disabled={c.open} onClick={() => ask('revoke')}>
-            − {t('se.revoke')}
-          </Button>
-          <Button
-            variant={blocked ? 'ok' : 'danger'}
-            small
-            disabled={c.open}
-            onClick={() => ask('block')}
-          >
-            {blocked ? t('se.unblock') : t('se.block')}
-          </Button>
-        </div>
+        </Link>
       </div>
 
-      {/* ---- grant ---- */}
-      <Confirm
-        open={c.open && action === 'grant'}
-        title={t('se.grantTitle')}
-        description={t('se.grantDesc', { n: packs, slots: packs * slotsPerPack })}
-        confirmLabel={t('se.grantConfirm')}
-        busy={c.busy}
-        error={c.error}
-        onCancel={close}
-        onConfirm={() => void run(() => api.grantSlots(seller.id, packs))}
-      >
-        <PackPicker value={packs} onChange={setPacks} />
-      </Confirm>
-
-      {/* ---- revoke ---- */}
-      <Confirm
-        open={c.open && action === 'revoke'}
-        title={seller.packsApproved > 0 ? t('se.revokeTitle') : t('se.revokeNoneTitle')}
-        description={
-          seller.packsApproved > 0
-            ? t('se.revokeDesc', { n: packs, slots: packs * slotsPerPack, used })
-            : t('se.revokeNoneDesc')
-        }
-        confirmLabel={t('se.revokeConfirm')}
-        tone="danger"
-        busy={c.busy}
-        error={c.error}
-        onCancel={close}
-        onConfirm={() => void run(() => api.revokeSlots(seller.id, packs))}
-      >
-        {seller.packsApproved > 0 && (
-          <PackPicker value={packs} onChange={setPacks} max={seller.packsApproved} />
-        )}
-      </Confirm>
-
-      {/* ---- block / unblock ---- */}
-      <Confirm
-        open={c.open && action === 'block'}
-        title={blocked ? t('se.unblockTitle') : t('se.blockTitle')}
-        description={blocked ? t('se.unblockDesc') : t('se.blockDesc')}
-        confirmLabel={blocked ? t('se.unblockConfirmBtn') : t('se.blockConfirmBtn')}
-        tone={blocked ? 'primary' : 'danger'}
-        busy={c.busy}
-        error={c.error}
-        onCancel={close}
-        onConfirm={() => void run(() => api.blockSeller(seller.id, !blocked, blockReason.trim()))}
-      >
-        {!blocked && (
-          <div style={{ marginTop: 10 }}>
-            <label className="field__l">{t('se.blockReason')}</label>
-            <textarea
-              className="textarea"
-              value={blockReason}
-              onChange={(e) => setBlockReason(e.target.value)}
-            />
-          </div>
-        )}
-      </Confirm>
+      {/* Below the row, not beside it: a confirmation has a sentence to say
+          about what it is about to do, and it needs the width to say it. */}
+      <div style={{ marginTop: 10 }}>
+        <SellerActions seller={seller} onDone={onDone} />
+      </div>
     </Card>
   )
-}
-
-function StatusPill({ status }: { status: SellerStatus }) {
-  const t = useT()
-  const tone =
-    status === 'ACTIVE' ? 'ok'
-      : status === 'PAYMENT_SUBMITTED' ? 'warn'
-        : status === 'BLOCKED' || status === 'PAYMENT_REJECTED' ? 'danger'
-          : 'neutral'
-  return <Pill tone={tone}>{t(`st.${status}`)}</Pill>
 }

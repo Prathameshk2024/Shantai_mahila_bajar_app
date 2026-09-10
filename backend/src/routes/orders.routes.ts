@@ -3,6 +3,7 @@ import type { Order, OrderStatus, PaymentMode, SellerGroup } from '@shared/types
 import { actionFor, canTransition, initialPaymentStatus } from '@shared/orderFlow.js'
 import { getDb, save } from '../db/store.js'
 import { recordOrderCustomer } from '../db/customers.js'
+import { newShortId } from '../db/ids.js'
 import { requireRole } from '../middleware/auth.js'
 
 export const ordersRouter: Router = Router()
@@ -149,7 +150,7 @@ ordersRouter.post('/', requireRole('customer'), (req, res) => {
 
     const now = new Date().toISOString()
     const order: Order = {
-      id: `SMB${Math.floor(1000 + Math.random() * 8999)}`,
+      id: newShortId('SMB', (id) => db.orders.some((o) => o.id === id)),
       groupId,
       sellerId: seller.id,
       customerId: auth.customerId!,

@@ -35,22 +35,30 @@ export function Cart() {
   // Sellers come from the catalog, which already carries a seller card per item.
   const [data, loading] = useAsync(() => api.catalog(), [])
 
-  if (loading) return <><AppBar title={t('nav.cart')} /><div className="screen"><Loading /></div></>
+  if (loading) return <><AppBar brand title={t('nav.cart')} /><div className="screen"><Loading /></div></>
 
   if (count === 0) {
     return (
       <>
-        <AppBar title={t('nav.cart')} />
+        <AppBar brand title={t('nav.cart')} />
         <div className="screen">
           <Card>
             <EmptyState
               icon={IconCart}
               title={t('cus.cartEmpty')}
               body={t('cus.cartEmptySub')}
-              action={<Button onClick={() => nav('/shop')}>{t('cus.startShopping')}</Button>}
+              action={
+                <Button data-wt="cart-empty" onClick={() => nav('/shop')}>
+                  {t('cus.startShopping')}
+                </Button>
+              }
             />
           </Card>
         </div>
+
+        {/* The tour belongs on this branch too: an empty basket is where a
+            first-time shopper needs telling that products come first. */}
+        <PageTour id="shop.cart" />
       </>
     )
   }
@@ -62,7 +70,7 @@ export function Cart() {
 
   return (
     <>
-      <AppBar title={t('nav.cart')} sub={`${count} ${t('ord.items')}`} />
+      <AppBar brand title={t('nav.cart')} sub={`${count} ${t('ord.items')}`} />
       <div className="screen stack" data-wt="cart-list">
         {groups.length > 1 && <Notice tone="info">{t('cus.perSellerNote')}</Notice>}
 
@@ -340,10 +348,15 @@ export function Checkout() {
                       ) : (
                         <QrCode value={link} size={150} label={t('cus.payTo')} />
                       )}
-                      <a className="btn" href={link} style={{ marginTop: 'var(--s3)' }}>
-                        {t('cus.payNow')} · ₹{g.total}
-                      </a>
                       <div className="tiny dim center" style={{ marginTop: 6 }}>{g.seller?.upiId}</div>
+                      {/* No "pay now" link any more. Tapping straight through to
+                          a UPI app paid a woman who may not be able to make the
+                          order at all - she has no way to refund, so the money
+                          sits with her and the buyer is the one chasing it.
+                          Ring her first, pay second. */}
+                      <Notice tone="warn" title={t('cus.scanToPay')}>
+                        {t('cus.askSellerFirst')}
+                      </Notice>
                     </>
                   ) : (
                     /* She has not set her payment QR up yet, so there is
@@ -570,7 +583,7 @@ export function CustomerProfile() {
 
   return (
     <>
-      <AppBar title={t('prof.title')} />
+      <AppBar brand title={t('prof.title')} />
       <div className="screen stack">
         {/* Her name is registration data, not a display string, so it is
             editable here and written back to her customer record. The seller

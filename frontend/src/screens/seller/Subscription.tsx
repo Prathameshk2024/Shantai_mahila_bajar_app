@@ -266,13 +266,6 @@ export function PaymentWaiting() {
           <Button variant="ghost" onClick={() => nav('/seller/help')}><IconWhatsapp aria-hidden="true" /> {t('wait.contactHelp')}</Button>
         </div>
         <Button variant="quiet" onClick={() => nav('/seller')}>{t('biz.title')}</Button>
-
-        <Notice tone="warn">
-          Demo: approve this from the admin API —
-          <code style={{ display: 'block', marginTop: 4, fontSize: '0.8rem' }}>
-            POST /api/admin/payments/{latest?.id ?? '<id>'}/approve
-          </code>
-        </Notice>
       </div>
     </div>
   )

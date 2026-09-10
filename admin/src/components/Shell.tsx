@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useI18n, useT } from '../i18n/I18nProvider.js'
 import logo from '../assets/logo.png'
 import { useAuth } from '../store/AuthContext.js'
@@ -7,8 +7,8 @@ import { api } from '../lib/api.js'
 import { Button, useAsync } from './ui.js'
 import { useToast } from '../store/ToastContext.js'
 import {
-  IconHome, IconImpact, IconOrders, IconPayments, IconProducts, IconSellers,
-  IconToday,
+  IconBack, IconHome, IconImpact, IconOrders, IconPayments, IconProducts,
+  IconSellers, IconToday,
 } from './icons.js'
 
 /**
@@ -148,9 +148,23 @@ export function LangToggle() {
   )
 }
 
-export function TopBar({ title, sub }: { title: string; sub?: string }) {
+export function TopBar({
+  title, sub, back, backLabel,
+}: {
+  title: string
+  sub?: string
+  /** Where the arrow goes. A page reached from a list needs the way back in
+   *  the chrome, not only in the browser's own button. */
+  back?: string
+  backLabel?: string
+}) {
   return (
     <div className="topbar">
+      {back && (
+        <Link className="topbar__back" to={back} aria-label={backLabel ?? 'Back'}>
+          <IconBack aria-hidden="true" />
+        </Link>
+      )}
       <h1>{title}</h1>
       {sub && <span className="topbar__sub">{sub}</span>}
     </div>

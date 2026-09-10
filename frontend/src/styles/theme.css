@@ -154,7 +154,15 @@ p, h1, h2, h3, li, span, div { overflow-wrap: anywhere; }
 .app-shell {
   max-width: 520px;
   margin: 0 auto;
+  /*
+   * dvh, not 100%. Chrome on Android hides its toolbar as she scrolls down and
+   * the visible area grows, but a percentage height was resolved against the
+   * viewport that existed at layout time - so the shell ended short and the
+   * four tabs sat on a band of bare cream above the gesture bar. 100% stays
+   * first as the fallback for a WebView that has never heard of dvh.
+   */
   min-height: 100%;
+  min-height: 100dvh;
   background: var(--bg);
   position: relative;
   display: flex;
@@ -174,11 +182,17 @@ p, h1, h2, h3, li, span, div { overflow-wrap: anywhere; }
   flex: 1;
   width: 100%;
   padding: var(--s4);
-  padding-bottom: calc(var(--nav-h) + var(--safe-b) + var(--s5));
+  /*
+   * No room reserved for the tab bar. It is sticky and therefore still IN the
+   * flow, so it takes its own 66px; adding them here again left an empty
+   * cream block at the end of every scroll and pushed the shell past the
+   * bottom of the screen.
+   */
+  padding-bottom: var(--s5);
 }
 .screen--nonav { padding-bottom: calc(var(--s6) + var(--safe-b)); }
 @media (min-width: 600px) {
-  .screen { padding: var(--s5); padding-bottom: calc(var(--nav-h) + var(--safe-b) + var(--s5)); }
+  .screen { padding: var(--s5); }
 }
 
 /* --- top app bar: maroon, the brand band ------------------- */
@@ -223,6 +237,15 @@ p, h1, h2, h3, li, span, div { overflow-wrap: anywhere; }
   place-items: center;
 }
 .appbar__btn:active { background: rgba(255, 255, 255, 0.16); }
+
+/* The brand mark already carries its own gold ring - no border, no backdrop. */
+.appbar__mark {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: block;
+}
 
 /* --- bottom nav: the selected tab is unmistakable ---------- */
 .bottomnav {

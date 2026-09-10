@@ -392,6 +392,8 @@ const mr: Record<string, string> = {
   'cus.choosePayment': 'पैसे कसे द्याल?', 'cus.payCod': 'वस्तू मिळाल्यावर रोख',
   'cus.payUpi': 'UPI ने आताच', 'cus.payUpiSub': 'विक्रेतीच्या खात्यात थेट',
   'cus.payTo': 'यांना पैसे द्या', 'cus.payNow': 'पैसे द्या',
+  'cus.scanToPay': 'हा QR स्कॅन करून पैसे भरा',
+  'cus.askSellerFirst': 'पैसे भरण्यापूर्वी विक्रेतीला फोन करा आणि ही ऑर्डर घेता येईल का ते विचारा. त्या हो म्हणाल्यावरच पैसे भरा आणि ऑर्डर द्या.',
   'cus.enterUtr': 'पेमेंटचा संदर्भ क्रमांक', 'cus.orderPlaced': 'ऑर्डर झाली!',
   'cus.orderPlacedNote': 'विक्रेतीला तुमची ऑर्डर मिळाली आहे. ती लवकरच संपर्क करेल.',
   'cus.trackOrder': 'ऑर्डर कुठे आहे?', 'cus.myOrders': 'माझ्या ऑर्डर',
@@ -480,9 +482,9 @@ const mr: Record<string, string> = {
   'wt.ex2': 'प्रकारावर बोट ठेवा — त्या प्रकारातील सर्व वस्तू दिसतील.',
   'wt.ex3': 'वस्तूवर बोट ठेवा, माहिती वाचा आणि टोपलीत टाका.',
 
-  'wt.ca1': 'सर्व प्रकार इथे आहेत. एकावर बोट ठेवा.',
-  'wt.ca2': 'खालच्या चार बटणांतून कुठेही जा — वस्तू पहा, प्रकार, टोपली, माझी माहिती.',
+  'wt.ca1': 'इथे सर्व प्रकार आहेत — खाणे, कपडे, सजावट. एकावर बोट ठेवा, त्यातील सर्व वस्तू दिसतील.',
 
+  'wt.ct0': 'टोपली रिकामी आहे. ऑर्डर करण्यासाठी आधी वस्तू निवडाव्या लागतात — "वस्तू पहा" दाबा, आवडेल ती वस्तू टोपलीत टाका आणि इथे परत या.',
   'wt.ct1': 'टोपलीतील वस्तू. संख्या बदलायची असेल तर + किंवा − दाबा; 0 केले की वस्तू निघून जाते.',
   'wt.ct2': 'प्रत्येक विक्रेतीची ऑर्डर वेगळी. एकूण रक्कम इथे दिसते.',
   'wt.ct3': 'पुढे दाबा — पत्ता निवडा आणि पैसे कसे द्यायचे ते ठरवा.',
@@ -890,6 +892,8 @@ const en: Record<string, string> = {
   'cus.choosePayment': 'How will you pay?', 'cus.payCod': 'Cash when it arrives',
   'cus.payUpi': 'Pay now by UPI', 'cus.payUpiSub': 'Straight to the seller',
   'cus.payTo': 'Pay this seller', 'cus.payNow': 'Pay now',
+  'cus.scanToPay': 'Scan this QR to pay',
+  'cus.askSellerFirst': 'Before you pay, call the seller and ask whether she can take this order. Pay and place the order only after she says yes.',
   'cus.enterUtr': 'Payment reference number', 'cus.orderPlaced': 'Order placed!',
   'cus.orderPlacedNote': 'The seller has your order and will be in touch shortly.',
   'cus.trackOrder': 'Track order', 'cus.myOrders': 'My orders',
@@ -974,9 +978,9 @@ const en: Record<string, string> = {
   'wt.ex2': 'Tap a type to see everything in it.',
   'wt.ex3': 'Tap a product to read about it and add it to the cart.',
 
-  'wt.ca1': 'Every type is here. Tap one.',
-  'wt.ca2': 'The four buttons below take you anywhere: Explore, Categories, Cart, My Profile.',
+  'wt.ca1': 'Every type is here - food, clothes, decoration. Tap one to see everything in it.',
 
+  'wt.ct0': 'Your basket is empty. You need products in it before you can order - tap Browse products, add what you like, then come back here.',
   'wt.ct1': 'What is in your cart. Tap + or - to change the number; 0 removes it.',
   'wt.ct2': 'Each seller is her own order. The total for each one shows here.',
   'wt.ct3': 'Tap Next to pick your address and choose how to pay.',

@@ -48,7 +48,7 @@ export function Explore() {
 
   return (
     <>
-      <AppBar title={t('app.name')} sub={t('app.tagline')} />
+      <AppBar brand title={t('app.name')} />
       <div className="screen stack">
         <TextInput
           data-wt="ex-search"
@@ -103,7 +103,7 @@ export function Categories() {
 
   return (
     <>
-      <AppBar title={t('nav.categories')} />
+      <AppBar brand title={t('nav.categories')} />
       <div className="screen" data-wt="cat-grid">
         {loading ? (
           <Loading />

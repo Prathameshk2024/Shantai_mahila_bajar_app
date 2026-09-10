@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { SEEN_KEY, TOURS, TOUR_MENU, markTourSeen, seenTours } from '../src/lib/tours.js'
+import {
+  SEEN_KEY, TOURS, TOUR_MENU, markTourSeen, seenTours, shouldMarkSeen, wantsTour,
+} from '../src/lib/tours.js'
 import { dictionaries } from '../src/i18n/strings.js'
 
 /**
@@ -87,14 +89,99 @@ test('every step targets a control the app actually renders', async () => {
   walk(join(import.meta.dirname, '..', 'src'))
   const src = files.map((f) => readFileSync(f, 'utf8')).join('\n')
 
+  /* A selector is one or more parts - `[data-wt="cart-list"] .stepper` - and
+     every part has to be something a component really renders. */
+  const rendered = (part: string): boolean => {
+    const attr = part.match(/^\[data-wt="([^"]+)"\]$/)
+    if (attr) return src.includes(`data-wt="${attr[1]}"`)
+    if (part.startsWith('.')) return src.includes(part.slice(1))
+    // A bare tag name, e.g. the `button` inside a tagged grid.
+    return /^[a-z]+$/.test(part)
+  }
+
   const orphans: string[] = []
   for (const [id, steps] of Object.entries(TOURS)) {
     for (const { sel } of steps) {
       if (!sel) continue
-      const attr = sel.match(/^\[data-wt="([^"]+)"\]$/)
-      const found = attr ? src.includes(`data-wt="${attr[1]}"`) : src.includes(sel.slice(1))
-      if (!found) orphans.push(`${id}: ${sel}`)
+      const missing = sel.split(/\s+/).filter((part) => !rendered(part))
+      if (missing.length) orphans.push(`${id}: ${sel} (${missing.join(', ')})`)
     }
   }
   assert.deepEqual(orphans, [], 'these steps ring nothing')
+})
+
+/* ------------------------------------------------------------------ */
+/* What each customer tour points at                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The Categories screen holds one kind of thing - the type tiles - and the
+ * walkthrough used to spend its second step ringing the bottom nav, so a woman
+ * asking "what is this screen?" was shown the cart instead of an answer.
+ */
+test('the categories walkthrough stays on the categories', () => {
+  const strays = TOURS['shop.categories']
+    .filter((s) => !s.sel?.startsWith('[data-wt="cat-grid"]'))
+    .map((s) => s.sel ?? '(no target)')
+
+  assert.deepEqual(strays, [], 'these steps point somewhere else on the screen')
+})
+
+/**
+ * An empty cart has no quantity buttons and no checkout bar, so the tour found
+ * nothing and said nothing - which leaves a first-time shopper looking at an
+ * empty basket with no idea that products come first. It now has a step for
+ * exactly that screen.
+ */
+test('an empty cart is explained rather than skipped', () => {
+  const empty = TOURS['shop.cart'].find((s) => s.sel?.includes('cart-empty'))
+
+  assert.ok(empty, 'the empty cart has a step of its own')
+  assert.equal(empty!.provisional, true, 'it is not the real cart walkthrough')
+})
+
+/**
+ * And seeing it must NOT burn the real one: she reads "choose products first",
+ * comes back with three jars of pickle, and still gets taught the + / − buttons
+ * and the checkout bar.
+ */
+test('the empty-cart step alone does not count as having seen the tour', () => {
+  const provisionalOnly = TOURS['shop.cart'].filter((s) => s.provisional)
+  const withRealSteps = TOURS['shop.cart'].filter((s) => !s.provisional)
+
+  assert.equal(shouldMarkSeen(provisionalOnly), false)
+  assert.equal(shouldMarkSeen(withRealSteps), true)
+})
+
+/* ------------------------------------------------------------------ */
+/* Deciding to open                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Replaying from Help & Training stopped working the moment the tour had to
+ * wait for the screen to load.
+ *
+ * The replay arrives as route state, and that state is cleared immediately so
+ * a Back press does not start the tour over. Clearing it re-ran the decision -
+ * this time with no replay and a tour already marked seen - which cancelled
+ * the open that was still looking for the controls. She tapped "Categories",
+ * landed on the real page, and nothing happened.
+ *
+ * So the intent survives the state that carried it.
+ */
+
+test('a replay opens the tour even when it has been seen before', () => {
+  assert.equal(wantsTour({ replay: true, seen: true, already: false }), true)
+})
+
+test('clearing the route state does not cancel a replay already asked for', () => {
+  assert.equal(wantsTour({ replay: false, seen: true, already: true }), true)
+})
+
+test('a tour she has seen does not open itself again', () => {
+  assert.equal(wantsTour({ replay: false, seen: true, already: false }), false)
+})
+
+test('a tour she has never seen opens on its own', () => {
+  assert.equal(wantsTour({ replay: false, seen: false, already: false }), true)
 })

@@ -391,6 +391,49 @@ adminRouter.get('/sellers', (_req, res) => {
   })
 })
 
+/**
+ * One woman, whole.
+ *
+ * The register lists everybody and shows a line each; this is the page an
+ * admin opens before deciding something about her, so it answers in one
+ * request what would otherwise be four - her record, her listings, her orders
+ * and every subscription payment she has ever submitted.
+ */
+adminRouter.get('/sellers/:id', (req, res) => {
+  const db = getDb()
+  const seller = db.sellers.find((s) => s.id === req.params.id)
+  if (!seller) {
+    res.status(404).json({ error: 'Seller not found', messageMr: 'ही विक्रेती सापडली नाही' })
+    return
+  }
+
+  // Archived listings are excluded exactly as they are in the register, so
+  // "3 products" means the same number on both screens.
+  const products = db.products.filter(
+    (p) => p.sellerId === seller.id && p.status !== 'ARCHIVED',
+  )
+  const orders = db.orders
+    .filter((o) => o.sellerId === seller.id)
+    .sort((a, b) => b.placedAt.localeCompare(a.placedAt))
+
+  res.json({
+    seller: { ...seller, slots: slotInfo(seller, products), productCount: products.length },
+    products,
+    orders,
+    payments: db.payments
+      .filter((p) => p.sellerId === seller.id)
+      .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)),
+    /**
+     * What she has earned, counted the way /admin/impact counts it: delivered
+     * orders and nothing else. Two screens answering "how much has she made"
+     * with two different numbers is how an admin stops trusting either.
+     */
+    earned: orders
+      .filter((o) => o.status === 'DELIVERED')
+      .reduce((n, o) => n + o.total, 0),
+  })
+})
+
 adminRouter.post('/sellers/:id/block', (req, res) => {
   const db = getDb()
   const seller = db.sellers.find((s) => s.id === req.params.id)

@@ -17,6 +17,39 @@ export interface TourStep {
   title: string
   /** What to do with it, written for this screen. */
   body: string
+  /**
+   * A stand-in for a screen that has nothing on it yet - an empty cart.
+   * Worth showing, not worth counting: a woman told "choose some products
+   * first" has not yet been taught the cart, so seeing this must not spend
+   * her one automatic showing of the real thing.
+   */
+  provisional?: boolean
+}
+
+/**
+ * Should this screen be trying to open its walkthrough?
+ *
+ * `already` is what makes a replay survive. The replay arrives as route state
+ * and that state is wiped at once, so a Back press onto the same entry does
+ * not start the tour over - but the tour may still be waiting for the screen
+ * to finish loading before it has anything to ring. Without carrying the
+ * intent forward, wiping the state cancels the open, and tapping a topic in
+ * Help & Training lands on the right page and does nothing at all.
+ */
+export function wantsTour(
+  { replay, seen, already }: { replay: boolean; seen: boolean; already: boolean },
+): boolean {
+  return replay || already || !seen
+}
+
+/**
+ * Did she actually see the walkthrough, or only a stand-in?
+ *
+ * Only a real step closes the tour for good. A screen that had nothing to
+ * point at offers itself again once it does.
+ */
+export function shouldMarkSeen(shown: TourStep[]): boolean {
+  return shown.some((s) => !s.provisional)
 }
 
 export type TourId =
@@ -32,7 +65,7 @@ export const TOURS: Record<TourId, TourStep[]> = {
   ],
   'seller.upload': [
     { sel: '[data-wt="up-dots"]', title: 'prod.add', body: 'wt.up1' },
-    { sel: '[data-wt="up-body"]', title: 'prod.photos', body: 'wt.up2' },
+    { sel: '[data-wt="up-body"] .field', title: 'prod.photos', body: 'wt.up2' },
     { sel: '[data-wt="up-next"]', title: 'common.next', body: 'wt.up3' },
   ],
   'seller.profile': [
@@ -47,14 +80,22 @@ export const TOURS: Record<TourId, TourStep[]> = {
   'shop.explore': [
     { sel: '[data-wt="ex-search"]', title: 'common.search', body: 'wt.ex1' },
     { sel: '[data-wt="ex-cats"]', title: 'nav.categories', body: 'wt.ex2' },
-    { sel: '[data-wt="ex-grid"]', title: 'cus.homemade', body: 'wt.ex3' },
+    { sel: '[data-wt="ex-grid"] .pcard', title: 'cus.homemade', body: 'wt.ex3' },
   ],
+  /* This screen holds one kind of thing, so the tour says one thing and
+     rings one TILE. A ring around the whole grid is not a highlight, and the
+     second step used to point at the cart - answering a question she had not
+     asked, on a screen she was still reading. */
   'shop.categories': [
-    { sel: '[data-wt="cat-grid"]', title: 'nav.categories', body: 'wt.ca1' },
-    { sel: '.bottomnav', title: 'nav.cart', body: 'wt.ca2' },
+    { sel: '[data-wt="cat-grid"] button', title: 'nav.categories', body: 'wt.ca1' },
   ],
+  /* An empty basket first - it is the only thing on that screen, and "choose
+     products before you can order" is what she is missing. It disappears the
+     moment there is something in the cart, which is when the other three
+     controls exist. */
   'shop.cart': [
-    { sel: '[data-wt="cart-list"]', title: 'nav.cart', body: 'wt.ct1' },
+    { sel: '[data-wt="cart-empty"]', title: 'cus.cartEmpty', body: 'wt.ct0', provisional: true },
+    { sel: '[data-wt="cart-list"] .stepper', title: 'nav.cart', body: 'wt.ct1' },
     { sel: '[data-wt="cart-total"]', title: 'cus.grandTotal', body: 'wt.ct2' },
     { sel: '[data-wt="cart-checkout"]', title: 'cus.checkout', body: 'wt.ct3' },
   ],

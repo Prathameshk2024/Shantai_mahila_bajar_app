@@ -123,6 +123,7 @@ export function PhoneScreen({ mode }: { mode: 'join' | 'login' }) {
   return (
     <div className="app-shell">
       <AppBar
+        brand
         title={t('onb.phoneTitle')}
         sub={role === 'seller' ? t('lp.sellerDoor') : t('lp.customerDoor')}
         backTo="/"
@@ -309,6 +310,7 @@ export function OtpScreen() {
   return (
     <div className="app-shell">
       <AppBar
+        brand
         title={t('onb.otpTitle')}
         sub={`${t('onb.otpSentTo')} +91 ${phone}`}
         bell={false}

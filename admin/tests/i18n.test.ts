@@ -1,5 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 import { dictionaries, LANGS } from '../src/i18n/strings.js'
 
 /**
@@ -58,4 +60,46 @@ test('every seller status the API can return has a label', () => {
     assert.ok(dictionaries.mr[`st.${status}`], `no Marathi label for ${status}`)
     assert.ok(dictionaries.en[`st.${status}`], `no English label for ${status}`)
   }
+})
+
+test('every admin decision she can be shown has a label', () => {
+  // shared/src/types.ts AdminNoticeKind. Her page reads these through a
+  // template string, so the usage test below cannot see them - and an
+  // unlabelled one prints "nt.SLOTS_GRANTED" in her decision history.
+  for (const kind of [
+    'SLOTS_GRANTED', 'SLOTS_REVOKED', 'PAYMENT_APPROVED', 'PAYMENT_REJECTED',
+    'BLOCKED', 'UNBLOCKED', 'PRODUCT_APPROVED', 'PRODUCT_REJECTED',
+  ]) {
+    assert.ok(dictionaries.mr[`nt.${kind}`], `no Marathi label for ${kind}`)
+    assert.ok(dictionaries.en[`nt.${kind}`], `no English label for ${kind}`)
+  }
+})
+
+/**
+ * A key that is asked for but never written renders as its own name - staff
+ * read "sd.earned" where a heading should be, in both languages at once,
+ * because the fallback is missing too. Nothing else catches it: the parity
+ * test above only proves the two dictionaries agree with each other, not that
+ * either agrees with the screens.
+ */
+const SRC = join(import.meta.dirname, '..', 'src')
+
+function sources(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const full = join(dir, name)
+    if (statSync(full).isDirectory()) return sources(full)
+    return /\.tsx?$/.test(name) ? [full] : []
+  })
+}
+
+test('every t() key a screen asks for exists in the dictionary', () => {
+  const missing = new Set<string>()
+  for (const file of sources(SRC)) {
+    const src = readFileSync(file, 'utf8')
+    for (const m of src.matchAll(/t\(\s*'([a-zA-Z0-9_.]+)'/g)) {
+      const key = m[1]!
+      if (!(key in dictionaries.mr)) missing.add(`${key}  (${file.replace(SRC, 'src')})`)
+    }
+  }
+  assert.deepEqual([...missing], [], 'these keys would render as their own name')
 })

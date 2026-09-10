@@ -58,7 +58,16 @@ export function Products() {
   )
 }
 
-function ProductCard({ product, onDone }: { product: ProductRow; onDone: () => void }) {
+/**
+ * One listing, with whatever action its status allows.
+ *
+ * Exported because her own page shows the same listings, and the take-down
+ * flow - a reason she reads, and 48 hours in which it can be undone - must be
+ * the same one in both places. A second copy is a second thing to keep in
+ * step, and the half that falls behind is the half that stops explaining
+ * itself.
+ */
+export function ProductCard({ product, onDone }: { product: ProductRow; onDone: () => void }) {
   const t = useT()
   const errorText = useErrorText()
 

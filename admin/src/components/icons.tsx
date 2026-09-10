@@ -1,8 +1,8 @@
 import type { ComponentType } from 'react'
 import {
-  FiAlertTriangle, FiBarChart2, FiCheckCircle, FiChevronRight, FiClipboard,
-  FiCopy,
-  FiFileText, FiHome, FiInbox, FiPackage, FiUsers,
+  FiAlertTriangle, FiBarChart2, FiCheck, FiCheckCircle, FiChevronLeft,
+  FiChevronRight, FiClipboard, FiCopy,
+  FiFileText, FiHome, FiInbox, FiPackage, FiUsers, FiX,
 } from 'react-icons/fi'
 import { MdCurrencyRupee } from 'react-icons/md'
 
@@ -40,3 +40,8 @@ export const IconWarn: IconType = FiAlertTriangle
 export const IconGo: IconType = FiChevronRight
 export const IconCopy: IconType = FiCopy
 export const IconEmpty: IconType = FiInbox
+export const IconBack: IconType = FiChevronLeft
+
+/* --- yes / no, for a list of things she does and does not have ----- */
+export const IconYes: IconType = FiCheck
+export const IconNo: IconType = FiX

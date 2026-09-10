@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useT } from '../i18n/I18nProvider.js'
 import {
-  TOURS, TOUR_MENU, markTourSeen, seenTours, type TourId,
+  TOURS, TOUR_MENU, markTourSeen, seenTours, shouldMarkSeen, wantsTour,
+  type TourId, type TourStep,
 } from '../lib/tours.js'
 import { Button, Dots } from './ui.js'
 import { IconNext, IconTraining } from './icons.js'
@@ -18,34 +19,104 @@ export function PageTour({ id }: { id: TourId }) {
   const t = useT()
   const nav = useNavigate()
   const loc = useLocation()
-  const steps = TOURS[id]
 
-  const [step, setStep] = useState<number | null>(null)
+  /**
+   * The steps whose control is REALLY on this screen, decided when the tour
+   * opens, not when it was written.
+   *
+   * An empty cart has no quantity buttons and no checkout bar, and a
+   * walkthrough of three missing controls is three dimmed screens that teach
+   * nothing. `null` means closed - and a tour that finds nothing does not
+   * open, is not marked seen, and offers itself again when there is something
+   * to point at.
+   */
+  const [live, setLive] = useState<TourStep[] | null>(null)
+  const [step, setStep] = useState(0)
   const [rect, setRect] = useState<DOMRect | null>(null)
+  /** An open we have committed to, still hunting for its controls. */
+  const [wanted, setWanted] = useState(false)
 
   /* Help & Training asks for a replay by navigating here with the tour id in
      route state. The state is dropped as soon as it is spent, so a Back press
      onto this same entry does not start it over. */
   const replay = (loc.state as { tour?: TourId } | null)?.tour === id
 
+  /**
+   * Decide, then hunt - two effects, because the decision is made once and the
+   * hunt can take a second.
+   *
+   * Wiping the route state re-runs this with `replay` already false, so the
+   * intent has to be remembered rather than re-derived: without `wanted`, the
+   * wipe cancelled the open that was still waiting for the screen to load, and
+   * a topic tapped in Help & Training landed on the right page and did
+   * nothing.
+   */
   useEffect(() => {
-    if (replay) {
-      setStep(0)
-      nav(loc.pathname, { replace: true, state: null })
-    } else if (!seenTours(localStorage).includes(id)) {
-      setStep(0)
-    }
+    const seen = seenTours(localStorage).includes(id)
+    setWanted((already) => wantsTour({ replay, seen, already }))
+    // Outside the updater: React may run an updater twice in development, and
+    // a navigation is not something to do twice.
+    if (replay) nav(loc.pathname, { replace: true, state: null })
   }, [id, replay, loc.pathname, nav])
+
+  useEffect(() => {
+    if (!wanted || live) return
+
+    /* The screen is usually still fetching when this mounts, so the controls
+       do not exist yet. Look again for a couple of seconds rather than
+       deciding on an empty page. */
+    let tries = 0
+    const open = () => {
+      const found = TOURS[id].filter((s) => !s.sel || document.querySelector(s.sel))
+      if (found.length) {
+        setLive(found)
+        setStep(0)
+        return true
+      }
+      return false
+    }
+    if (open()) return
+    const timer = setInterval(() => {
+      if (open()) return clearInterval(timer)
+      if (++tries > 6) {
+        clearInterval(timer)
+        // Asked for by name from Help & Training, so it never ends in silence:
+        // with nothing to ring, the words still get their screen.
+        setLive(TOURS[id])
+        setStep(0)
+      }
+    }, 400)
+    return () => clearInterval(timer)
+  }, [wanted, live, id])
 
   /* Follow the control: the screen scrolls under the ring, and a phone
      keyboard or a rotation moves everything. */
   useEffect(() => {
-    if (step === null) return
-    const sel = steps[step]?.sel
+    if (!live) return
+    const sel = live[step]?.sel
     const el = sel ? document.querySelector(sel) : null
-    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
 
-    const measure = () => setRect(el ? el.getBoundingClientRect() : null)
+    const measure = () => {
+      if (!el) return setRect(null)
+      const r = el.getBoundingClientRect()
+      /**
+       * A ring around something the size of the page is not a highlight - the
+       * dim is its own box-shadow, so a target that fills the screen pushes
+       * the shade off the edges and draws a border around everything. Past
+       * three quarters of the viewport, dim the screen and let the words do
+       * the work.
+       */
+      const covers = (r.height * r.width) / (window.innerHeight * window.innerWidth)
+      setRect(covers > 0.75 ? null : r)
+    }
+
+    // Only scroll when it is not already in front of her. A sticky bar is
+    // always in view, and scrolling to its position in the document flow
+    // throws the page to the bottom for no reason.
+    const r = el?.getBoundingClientRect()
+    const onScreen = r && r.top >= 0 && r.bottom <= window.innerHeight
+    if (el && !onScreen) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+
     measure()
     // The scroll above is animated, so one measurement lands mid-flight.
     const settle = setTimeout(measure, 400)
@@ -56,27 +127,34 @@ export function PageTour({ id }: { id: TourId }) {
       window.removeEventListener('scroll', measure, true)
       window.removeEventListener('resize', measure)
     }
-  }, [step, steps])
+  }, [step, live])
 
   const close = useCallback(() => {
     // Skipping counts as done. Being shown the same overlay every visit
     // because she chose not to read it is nagging, not teaching.
-    markTourSeen(localStorage, id)
-    setStep(null)
+    //
+    // A stand-in shown on an empty screen does not count: she was told to go
+    // and choose products, not taught the cart, so the real walkthrough is
+    // still owed to her.
+    if (live && shouldMarkSeen(live)) markTourSeen(localStorage, id)
+    // Closed means closed: a provisional tour is not marked seen, so without
+    // this the hunt would start again the moment it was dismissed.
+    setWanted(false)
+    setLive(null)
     setRect(null)
-  }, [id])
+  }, [id, live])
 
   useEffect(() => {
-    if (step === null) return
+    if (!live) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [step, close])
+  }, [live, close])
 
-  if (step === null || !steps.length) return null
+  if (!live) return null
 
-  const s = steps[Math.min(step, steps.length - 1)]!
-  const last = step >= steps.length - 1
+  const s = live[Math.min(step, live.length - 1)]!
+  const last = step >= live.length - 1
   // The card sits opposite the control, so it never covers what it explains.
   const cardTop = !!rect && rect.top + rect.height / 2 > window.innerHeight * 0.55
 
@@ -98,7 +176,7 @@ export function PageTour({ id }: { id: TourId }) {
       )}
 
       <div className={`tour__card ${cardTop ? 'tour__card--top' : ''}`}>
-        <Dots step={step} total={steps.length} />
+        <Dots step={step} total={live.length} />
         <h2 className="h2">{t(s.title)}</h2>
         <p className="body">{t(s.body)}</p>
         <div className="btn-row">

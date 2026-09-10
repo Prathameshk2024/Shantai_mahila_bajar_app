@@ -29,7 +29,7 @@ export default function MyBusiness() {
   if (loadingMe || loadingOrders || loadingProducts) {
     return (
       <>
-        <AppBar title={t('biz.title')} />
+        <AppBar brand title={t('biz.title')} />
         <div className="screen"><Loading /></div>
       </>
     )
@@ -37,7 +37,7 @@ export default function MyBusiness() {
   if (!me) {
     return (
       <>
-        <AppBar title={t('biz.title')} />
+        <AppBar brand title={t('biz.title')} />
         <div className="screen"><EmptyState title="—" /></div>
       </>
     )
@@ -69,6 +69,7 @@ export default function MyBusiness() {
   return (
     <>
       <AppBar
+        brand
         title={seller.shopName}
         sub={`${seller.womenBizId} · ${seller.village}`}
       />

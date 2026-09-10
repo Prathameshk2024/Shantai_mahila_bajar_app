@@ -135,6 +135,21 @@ export type SellerRow = Seller & {
   slots: { used: number; total: number }
 }
 
+/**
+ * Everything one seller's page needs, in one answer.
+ *
+ * `earned` is computed on the server rather than summed here: it counts
+ * delivered orders only, and that definition belongs next to the one the
+ * impact report uses, not copied into a screen.
+ */
+export interface SellerDetail {
+  seller: SellerRow
+  products: ProductRow[]
+  orders: OrderRow[]
+  payments: SubscriptionPayment[]
+  earned: number
+}
+
 export interface ImpactReport {
   generatedAt: string
   totals: {
@@ -183,6 +198,8 @@ export const api = {
     post<{ product: Product }>(`/admin/products/${id}/moderate`, { approve, reason }),
 
   sellers: () => get<{ sellers: SellerRow[] }>('/admin/sellers'),
+
+  sellerDetail: (id: string) => get<SellerDetail>(`/admin/sellers/${id}`),
 
   grantSlots: (id: string, packs: number) =>
     post<{ seller: Seller }>(`/admin/sellers/${id}/grant-slots`, { packs }),

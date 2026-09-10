@@ -185,6 +185,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background: var(--surface-2);
 }
 .topbar h1 { font-size: 20px; margin: 0; font-weight: 700; }
+/* The way back out of a page that was reached from a list. Aligned to the
+   heading rather than the baseline, so the arrow sits with the title. */
+.topbar__back {
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 30px; height: 30px;
+  margin-inline-start: -6px;
+  border-radius: var(--r);
+  color: var(--ink-2);
+  font-size: 19px;
+}
+.topbar__back:hover { background: var(--bg-2); color: var(--maroon); }
 .topbar__sub { color: var(--ink-2); font-size: 13px; }
 
 .body { padding: 20px 24px 56px; max-width: 1180px; }
@@ -485,6 +498,44 @@ table.t tr:last-child td { border-bottom: 0; }
 }
 .packbtn--on { background: var(--maroon); border-color: var(--maroon); color: #fff; font-weight: 700; }
 .packbtn:focus-visible { outline: 2px solid var(--maroon-mid); outline-offset: 2px; }
+
+/* ================= a record, read as label / value =================
+ * A description list rather than a table: these are facts about one woman,
+ * not rows to compare against each other, and a two-column grid keeps the
+ * values lined up without any of a table's furniture.
+ */
+.kv {
+  display: grid;
+  grid-template-columns: minmax(88px, 34%) 1fr;
+  gap: 6px 12px;
+  margin: 0 0 10px;
+  font-size: 13.5px;
+}
+.kv dt { color: var(--ink-3); }
+.kv dd { margin: 0; }
+
+/* ================= has / has not =================
+ * Colour is never the only signal - the tick and the cross say it too, which
+ * is what keeps this readable when it is printed or read by someone
+ * colour-blind.
+ */
+.checks { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 5px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-3); }
+.check--on { color: var(--ink); }
+.check__i {
+  flex: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px;
+  background: var(--bg-2); color: var(--ink-3);
+}
+.check--on .check__i { background: var(--ok-soft); color: var(--green); }
+
+/* ================= what was done, and when ================= */
+.timeline { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 8px; }
+.timeline > li {
+  padding-inline-start: 10px;
+  border-inline-start: 2px solid var(--line-2);
+}
 
 /* ================= landing sections ================= */
 
