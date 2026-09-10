@@ -52,8 +52,8 @@ development. Data lives in `backend/data/db.json`; delete it, or
 
 Worth clicking through:
 
-- **Registration wizard** — her Shantai Mahila Bazar ID appears live on step 2 as soon as
-  she picks a village, and her digital score on step 4 as she answers.
+- **Registration wizard** — the Shantai Mahila Bazar ID appears live on step 2 as soon
+  as the seller picks a village, and the digital score on step 4 as the answers come in.
 - **Add Product → step 2** — press the mic and speak the product name.
 - **Add Product → step 3** — food asks 4 fields, non-food asks 1.
 - **An order → पाठवले → पोहोचले** — it demands the customer's OTP, and the
@@ -84,15 +84,15 @@ Devanagari (`चिवरी → CHIVARI`, `रुद्रवाडी → RUDR
 
 ### Digital Readiness Index
 
-Ten factors, ten marks each. **Six** are answered by her at registration as
+Ten factors, ten marks each. **Six** are answered by the seller at registration as
 yes/no taps. The remaining four — branding, packaging, online customer contact,
-digital financial management — are **measured by the platform** from what she
+digital financial management — are **measured by the platform** from what the seller
 actually does, because someone who has never done a thing cannot honestly
 self-report it.
 
 That split is what makes the before/after comparison meaningful: the six
 self-reported answers are the baseline captured on day one, and the four
-measured ones move on their own as she uses the platform.
+measured ones move on their own as the seller uses the platform.
 
 Bands: 0-25 प्रारंभिक · 26-50 मूलभूत · 51-75 प्रगत · 76-100 डिजिटल उद्योजिका.
 
@@ -105,11 +105,11 @@ Collected in six steps. New fields taken from the project plan are marked ←.
 | Step | Fields |
 |---|---|
 | 1 · About you | name (voice), **age ←**, **education ←**, WhatsApp number ← |
-| 2 · Village | village (from the 6 supported villages, or free text), taluka, district, pincode → **generates her Shantai Mahila Bazar ID** |
+| 2 · Village | village (from the 6 supported villages, or free text), taluka, district, pincode → **generates the Shantai Mahila Bazar ID** |
 | 3 · Business | shop name (voice), business type (individual / SHG / Udyam), SHG name, **years in business ←**, **monthly capacity ←**, about (voice), sells food?, FSSAI number + expiry |
 | 4 · Digital use ← | six yes/no questions → **Digital Readiness Index** |
 | 5 · Money in | UPI ID, delivery charge, minimum order, dispatch time |
-| 6 · Review | everything, plus her ID and score, before submitting |
+| 6 · Review | everything, plus the ID and score, before submitting |
 
 ---
 
@@ -131,7 +131,7 @@ curl localhost:4000/api/admin/stats -H "Authorization: Bearer $TOKEN"
 |---|---|
 | `GET /api/admin/stats` | dashboard, registration funnel, earnings bands, readiness bands |
 | `GET /api/admin/payments?status=PENDING` | the ₹50 approvals queue, with `waitingHours` and a duplicate-UTR flag |
-| `POST /api/admin/payments/:id/approve` | grants 5 slots and flips her to ACTIVE |
+| `POST /api/admin/payments/:id/approve` | grants 5 slots and flips the seller to ACTIVE |
 | `POST /api/admin/payments/:id/reject` | with a reason |
 | `POST /api/admin/sellers/:id/grant-slots` | goodwill / trainee batch |
 | `GET /api/admin/products?status=PENDING` | moderation queue |
@@ -238,8 +238,8 @@ tokens, so a new theme is a change to that one block and nothing else.
 
 `frontend/src/lib/useVoiceInput.ts` wraps the Web Speech API; the `VoiceInput`
 component in `components/ui.tsx` renders a text field with a mic beside it. It is
-used for the product name, ingredients, material, her name, shop name and her
-"about" text.
+used for the product name, ingredients, material, and the seller's own name,
+shop name and "about" text.
 
 The keyboard is never removed — voice is an addition. On a phone without speech
 support (iOS Safari) the mic simply does not render. Inside the APK the WebView
@@ -281,7 +281,7 @@ server    POST verifyAccessToken { authkey, access-token }  →  the number
 server    that number must equal the phone in the request, or 401
 ```
 
-The browser never gets to assert "she passed" — it carries a token that means
+The browser never gets to assert "this number passed" — it carries a token that means
 nothing until the server re-checks it with an auth key the bundle does not
 have. The last line is the whole security of it: a token proves that *some*
 number was verified, so without comparing it to the number in the request,
@@ -332,7 +332,7 @@ to proxy through.
 Then for the share QR:
 - **Android App Links** verified against your domain
 - **Play Install Referrer API** for deferred deep linking, so someone who scans
-  her QR without the app installed lands on *her shop* after installing
+  a seller's QR without the app installed lands on *that shop* after installing
 
 > Do **not** use Firebase Dynamic Links. It shut down on 25 August 2025.
 

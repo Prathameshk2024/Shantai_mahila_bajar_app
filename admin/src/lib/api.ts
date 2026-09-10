@@ -12,7 +12,8 @@ import type {
  */
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
-const TOKEN_KEY = 'wb.admin.token'
+/** Exported so AuthContext can recognise it on a cross-tab `storage` event. */
+export const TOKEN_KEY = 'wb.admin.token'
 
 /**
  * The token lives in MEMORY; localStorage only carries it across a reload.

@@ -32,7 +32,7 @@ address a woman actually types is written into the order and then forgotten.
 The five live orders carry ids `c1`–`c4`. `auth.routes.ts:60` issues
 `c-${phone}` at login. These never match. A real login by 9011223344
 (प्रिया देशमुख) filters `/orders/mine` on `c-9011223344`, matches nothing, and
-shows an empty order history — while both her orders sit in Firestore.
+shows an empty order history — while both of the customer's orders sit in Firestore.
 
 This bug exists today, independent of this work.
 
@@ -51,7 +51,7 @@ every new customer.
 `middleware/auth.ts:7`: *"The token here is a base64 blob, NOT a signed
 credential — anyone could forge one."*
 
-Tolerable today, because a customer token unlocks only her order list and two
+Tolerable today, because a customer token unlocks only that customer's order list and two
 fake addresses. Once real home addresses are stored per customer, a forged
 token — `{"role":"customer","customerId":"c-9011223344"}`, base64-encoded —
 reads any woman's home address. Storing PII behind a forgeable token is not
@@ -62,7 +62,7 @@ acceptable, so token signing is in scope for Phase 1.
 ## 2. Goals
 
 1. A durable customer record per phone number, in Firestore.
-2. Addresses belong to a customer; she can see, add, edit and delete only her own.
+2. Addresses belong to a customer, who can see, add, edit and delete only those.
 3. Returning customers get their name and addresses prefilled at checkout.
 4. The address used for an order is saved automatically.
 5. The five existing orders are correctly associated with four customer records.
@@ -127,7 +127,7 @@ untouched. Rollback is restoring the list entry.
 ### 4.4 Two deliberate choices
 
 **Addresses are embedded in the customer document, not a separate collection.**
-A customer has two or three. They are only ever read together with her record.
+A customer has two or three. They are only ever read together with the customer's record.
 Embedding makes the write atomic and costs one document read rather than a
 query, and stays far inside Firestore's 1 MB document limit.
 
@@ -214,10 +214,10 @@ is what makes cross-customer access impossible.
 | `PATCH` | `/api/customers/me/addresses/:id` | Edit, or set as default. |
 | `DELETE` | `/api/customers/me/addresses/:id` | Remove one. |
 
-Address routes 404 when the id is not in *her* `addresses` array, so a guessed
+Address routes 404 when the id is not in *that customer's* `addresses` array, so a guessed
 id from another customer is indistinguishable from a non-existent one.
 
-Setting `isDefault: true` clears the flag on her other addresses in the same
+Setting `isDefault: true` clears the flag on the customer's other addresses in the same
 write.
 
 ### 7.2 Removed
@@ -231,7 +231,7 @@ After orders are created and before `save()`, upsert the customer:
 - create the record if absent
 - update `name` when `customerName` was supplied and is not the `'ग्राहक'` placeholder
 - append the delivery address if not already present (dedupe on `line` + `pincode`)
-- mark it default when it is her only address
+- mark it default when it is the only address on record
 - set `updatedAt`
 
 Request and response shapes are unchanged, so no other caller breaks.
@@ -252,14 +252,14 @@ supported languages.
 ### 8.2 `CartCheckout.tsx`
 
 - Replace `api.addresses()` with `api.customerMe()`.
-- **Returning customer** — her addresses render as the picker. Existing
+- **Returning customer** — the saved addresses render as the picker. Existing
   selection precedence is preserved: previously chosen id → one matching the
   saved pincode → default → first.
 - **New customer (no addresses)** — render `AddressForm` inline instead of an
   empty picker. On submit it posts to `/customers/me/addresses` and the new
   address becomes selected. **This is what unblocks checkout for new
   customers.**
-- "Add another address" action available when she already has some.
+- "Add another address" action available when some are already saved.
 - The name sent with the order comes from the customer record when available,
   falling back to `session?.name`, then `'ग्राहक'`.
 - No "save this address?" checkbox. The address used is saved automatically.

@@ -563,6 +563,9 @@ Run these across both apps.
 | ☐ O8 | Come back online and retry | It works |
 | ☐ O9 | Every API failure you can provoke | The response is `{ error, messageMr, fields? }` and the **Marathi** message is what the user sees |
 | ☐ O10 | Confirm the deployment is pinned to one API instance | Two instances each hold their own in-memory snapshot and silently overwrite each other. Autoscaling must stay off |
+| ☐ O11 | Delete a seller in the Firebase console while the API is running, then use her account | She still works, on the data the API loaded at boot. **This is the architecture, not a bug** — the whole dataset is read once at startup and never re-read |
+| ☐ O12 | After O11, restart the API and try again | Now she is gone. A restart is the only thing that picks up an out-of-band edit |
+| ☐ O13 | After O11, change something about that seller *before* restarting (edit her profile, take an order) | The document is **recreated** in Firestore: the diffed write sees a record that differs from the boot snapshot and sends it. Never edit data in the console against a running API |
 
 ---
 

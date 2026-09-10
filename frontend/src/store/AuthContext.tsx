@@ -96,6 +96,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  /**
+   * TABS SHARE A BROWSER, SO THEY SHARE A SESSION.
+   *
+   * Two tabs each hold their own copy of this state, and `storage` is the only
+   * event that crosses between them - it fires in every OTHER tab of this
+   * origin when the key changes. Without it, logging out in one tab left the
+   * second signed in and working: its React state was untouched, and the next
+   * time anything re-rendered, the effect above wrote the deleted key back.
+   * A refresh then found the resurrected key and the tab carried on, which is
+   * exactly what "log out" must never mean on a shared or borrowed phone.
+   *
+   * Adopting whatever storage now says also carries a sign-in the other way,
+   * and a re-stamped token, so the tabs cannot drift apart.
+   */
+  useEffect(() => {
+    function adopt(e: StorageEvent) {
+      // `key === null` is localStorage.clear(); anything else is not ours.
+      if (e.key !== null && e.key !== KEY) return
+      let next: Session | null = null
+      try {
+        const raw = localStorage.getItem(KEY)
+        next = raw ? (JSON.parse(raw) as Session) : null
+      } catch {
+        next = null
+      }
+      // Only on a real change. Setting a fresh object every time would have
+      // the effect above rewrite the key, which fires this in the other tab,
+      // which rewrites it back - forever.
+      setSession((cur) => (JSON.stringify(cur ?? null) === JSON.stringify(next) ? cur : next))
+    }
+    window.addEventListener('storage', adopt)
+    return () => window.removeEventListener('storage', adopt)
+  }, [])
+
   // Subscribed once, for the life of the app, so a refresh that arrives while
   // she is on any screen is kept.
   useEffect(() => {

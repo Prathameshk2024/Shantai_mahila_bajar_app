@@ -88,7 +88,9 @@ export function SellerProfile() {
         </Card>
 
         <Card data-wt="prof-slots">
-          <SectionTitle>{t('prof.subscription')}</SectionTitle>
+          {/* No heading: "My products 1 / 5" with a meter under it already
+              says what this card is, and the line above it said nothing the
+              card did not. */}
           <SlotMeter
             used={slots.used}
             total={slots.total}
