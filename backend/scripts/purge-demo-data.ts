@@ -18,6 +18,13 @@
  *
  *   npm run purge:demo              # dry run
  *   npm run purge:demo -- --commit  # delete
+ *
+ * If the demo records are more than half of a collection - which they are on a
+ * database with nothing else in it - the bulk-delete guard in db/firestore.ts
+ * will refuse the write and say so. That guard exists because of the 10
+ * September 2026 wipe. Deleting anyway is deliberate, and looks like it:
+ *
+ *   ALLOW_BULK_DELETE=true npm run purge:demo -- --commit
  */
 import { flush, getDb, initStore } from '../src/db/store.js'
 import { describeConfig } from '../src/config.js'
@@ -43,7 +50,7 @@ async function main(): Promise<void> {
   const seedSellerIds = new Set(seedSellers.map((s) => s.id))
   const realSellers = db.sellers.filter((s) => !seedSellerIds.has(s.id))
 
-  // Anything belonging to a demo seller goes with her, whatever its own id.
+  // Anything belonging to a demo seller goes with the seller, whatever its own id.
   const doomedProducts = db.products.filter(
     (p) => seedSellerIds.has(p.sellerId) || isSeedId(p.id),
   )
@@ -54,8 +61,8 @@ async function main(): Promise<void> {
     (p) => seedSellerIds.has(p.sellerId) || isSeedId(p.id) || !db.sellers.some((s) => s.id === p.sellerId),
   )
 
-  // A customer is demo data only if she exists BECAUSE of a demo order: she
-  // must have at least one order going, and none staying.
+  // A customer is demo data only if the seller exists BECAUSE of a demo order:
+  // they must have at least one order going, and none staying.
   //
   // The "at least one" half matters. Without it this also deletes anyone who
   // has signed in but not yet bought anything - a real person with a real

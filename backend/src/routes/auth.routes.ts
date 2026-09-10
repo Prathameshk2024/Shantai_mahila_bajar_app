@@ -44,6 +44,25 @@ export const authRouter: Router = Router()
  * Returns true when the caller has been dealt with, so handlers read as
  * `if (over(...)) return`.
  */
+/**
+ * "Try again in N" - in a unit a person uses.
+ *
+ * The daily send quota resets a whole day out, and the minutes version of that
+ * read "1440 मिनिटांनी पुन्हा प्रयत्न करा", which is a number rather than an
+ * answer. Nothing here is precise to the minute anyway.
+ */
+function retryInMr(sec: number): string {
+  // Marathi inflects for number, so one of anything takes a different ending.
+  // "1 दिवसांनी" is the kind of wrong that tells a woman this was not written
+  // for the seller, on the one screen where they are already being told no.
+  const say = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+
+  if (sec < 60 * 60) return say(Math.ceil(sec / 60), 'मिनिटाने', 'मिनिटांनी')
+  const hours = Math.ceil(sec / 3600)
+  if (hours < 24) return say(hours, 'तासाने', 'तासांनी')
+  return say(Math.ceil(hours / 24), 'दिवसाने', 'दिवसांनी')
+}
+
 function over(res: Response, key: string, limit: Limit): boolean {
   const result = hit(key, limit)
   if (result.ok) return false
@@ -51,7 +70,7 @@ function over(res: Response, key: string, limit: Limit): boolean {
   res.setHeader('Retry-After', String(result.retryAfterSec))
   res.status(429).json({
     error: 'Too many attempts',
-    messageMr: `खूप वेळा प्रयत्न झाले. ${Math.ceil(result.retryAfterSec / 60)} मिनिटांनी पुन्हा प्रयत्न करा.`,
+    messageMr: `खूप वेळा प्रयत्न झाले. ${retryInMr(result.retryAfterSec)} पुन्हा प्रयत्न करा.`,
     retryAfterSec: result.retryAfterSec,
   })
   return true
@@ -81,7 +100,8 @@ authRouter.post('/otp/send', async (req, res) => {
 
   // Both keys, always. Per-phone alone lets somebody walk through numbers to
   // burn the SMS budget; per-IP alone punishes a whole village behind one
-  // carrier NAT, which here is a real shape of traffic rather than an edge case.
+  // carrier NAT, which here is a real shape of traffic rather than an edge
+  // case.
   if (over(res, `otp:send:ip:${ip}`, LIMITS.otpSendPerIp)) {
     recordAuthEvent(getDb(), { type: 'ratelimit', ip, detail: 'otp.send ip' })
     save()
@@ -145,15 +165,15 @@ authRouter.post('/otp/verify', async (req, res) => {
   const client = describeClient(req.headers['user-agent'])
 
   if (role === 'seller') {
-    // Normalised on both sides: records stored before this fix may hold
-    // '98765 43210' or '+91...', and she is not registering a second time.
+    // Normalised on both sides: records stored before this fix may hold '98765
+    // 43210' or '+91...', and the seller is not registering a second time.
     const seller = db.sellers.find((s) => samePhone(s.phone, phone))
 
     if (!seller) {
       /**
-       * No seller record yet. She is verified but has nothing to sign in to,
-       * so instead of a session she gets a TICKET - short-lived, single-use
-       * proof that this phone passed an OTP just now.
+       * No seller record yet. The seller is verified but has nothing to sign
+       * in to, so instead of a session they get a TICKET - short-lived,
+       * single-use proof that this phone passed an OTP just now.
        *
        * /sellers/register demands it and reads the phone out of it. Before the
        * ticket existed, registration took a phone number straight from the
@@ -194,18 +214,18 @@ authRouter.post('/otp/verify', async (req, res) => {
 
   /**
    * The phone is still the customer's account - the id is derived from it, not
-   * allocated - but a verified phone alone is not a registration. She also has
-   * to have given us a name, because that name is what the seller reads on the
-   * order and what she is called when she is phoned about a delivery.
+   * allocated - but a verified phone alone is not a registration. They also
+   * has to have given us a name, because that name is what they read on the
+   * order and what they are called when they are phoned about a delivery.
    *
-   * The session is issued either way (she IS authenticated - the OTP is the
-   * proof, and the name step needs a token to write with), and `registered`
-   * tells the client whether to send her to /shop or to the one-field
-   * registration screen.
+   * The session is issued either way (the seller IS authenticated - the OTP is
+   * the proof, and the name step needs a token to write with), and
+   * `registered` tells the client whether to send them to /shop or to the
+   * one-field registration screen.
    *
    * The record is deliberately NOT created here. `ensureCustomer` would make
-   * an empty row that answers `registered: true` for ever after, and she would
-   * never be asked her name at all.
+   * an empty row that answers `registered: true` for ever after, and the
+   * seller would never be asked their name at all.
    */
   const customerId = customerIdFor(phone)
   const registered = isRegisteredCustomer(db, customerId)
@@ -265,7 +285,7 @@ authRouter.post('/logout', (req: Request, res: Response) => {
 })
 
 /* ------------------------------------------------------------------ */
-/* Her own signed-in devices                                           */
+/* The seller's own signed-in devices                                           */
 /* ------------------------------------------------------------------ */
 
 /** What "you are signed in on three phones" needs, and nothing about anyone else. */

@@ -83,7 +83,13 @@ export default function MyProducts() {
                     className="tile-tap"
                     onClick={() => nav(`/seller/products/${p.id}/edit`)}
                   >
-                    <ProductImage src={p.imageUrl} emoji={p.emoji} size={62} className="tile__img" />
+                    <ProductImage
+                      src={p.imageUrl}
+                      emoji={p.emoji}
+                      categoryId={p.categoryId}
+                      size={62}
+                      className="tile__img"
+                    />
                     <div className="tile__body">
                       <div className="tile__title">{p.name}</div>
                       <div className="row" style={{ gap: 6 }}>
@@ -104,9 +110,9 @@ export default function MyProducts() {
                     <span className="tile-tap__go" aria-hidden="true"><IconEdit /></span>
                   </button>
 
-                  {/* Rejected is not deleted. She reads why, and how long the
+                  {/* Rejected is not deleted. The seller reads why, and how long the
                       listing stays before it removes itself - so a product
-                      disappearing is something she was told about first. */}
+                      disappearing is something the seller was told about first. */}
                   {p.status === 'REJECTED' && (
                     <div style={{ marginTop: 'var(--s3)' }}>
                       <Notice tone="danger" title={t('prod.rejected')}>

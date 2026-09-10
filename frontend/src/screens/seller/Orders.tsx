@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { Order, OrderStatus } from '@shared/types.js'
 import {
-  HAPPY_PATH, SELLER_ACTIONS, STATUS_STYLE, statusLabelKey, stepIndex,
-  type SellerAction,
+  HAPPY_PATH, SELLER_ACTIONS, STATUS_STYLE, awaitingPaymentConfirmation,
+  statusLabelKey, stepIndex, type SellerAction,
 } from '@shared/orderFlow.js'
 import { useT } from '../../i18n/I18nProvider.js'
 import { api, ApiError } from '../../lib/api.js'
@@ -16,9 +16,9 @@ import { IconCall, IconCheck, IconMap, IconOrders } from '../../components/icons
 
 const TABS: { id: string; labelKey: string; statuses?: OrderStatus[] }[] = [
   { id: 'action', labelKey: 'biz.needsAction' },
-  // ACCEPTED, PACKED and OUT_FOR_DELIVERY are one tab: from her side they are
-  // the same order, in hand and not yet delivered. Splitting them gave three
-  // tabs that were each empty most of the time.
+  // ACCEPTED, PACKED and OUT_FOR_DELIVERY are one tab: from the seller's side
+  // they are the same order, in hand and not yet delivered. Splitting them
+  // gave three tabs that were each empty most of the time.
   { id: 'accepted', labelKey: 'ord.accepted', statuses: ['ACCEPTED', 'PACKED', 'OUT_FOR_DELIVERY'] },
   { id: 'done', labelKey: 'ord.delivered', statuses: ['DELIVERED'] },
   { id: 'cancelled', labelKey: 'ord.cancelled', statuses: ['REJECTED', 'CANCELLED'] },
@@ -106,8 +106,16 @@ export function SellerOrderDetail() {
   }
 
   const order = data.order
-  const actions = SELLER_ACTIONS[order.status]
+  /**
+   * The seller may ACCEPT an order they have not been paid for - that is the
+   * point of paying after acceptance - but they do not PACK one. The server
+   * refuses it too; hiding the button is what stops their finding that out by
+   * being told no.
+   */
+  const unpaid = awaitingPaymentConfirmation(order)
+  const actions = SELLER_ACTIONS[order.status].filter((a) => !(a.to === 'PACKED' && unpaid))
   const awaitingUpi = order.paymentMode === 'UPI' && order.paymentStatus === 'UPI_SUBMITTED'
+  const waitingForBuyer = order.paymentMode === 'UPI' && order.paymentStatus === 'UPI_PENDING'
   const style = STATUS_STYLE[order.status]
 
   async function run(action: SellerAction, extra?: { reason?: string }) {
@@ -117,8 +125,8 @@ export function SellerOrderDetail() {
       const res = await api.advanceOrder(order.id, action.to, extra)
       setData({ ...data!, order: res.order })
       setRejectOpen(false)
-      // Names the state she just moved it to, not a generic "saved" - the
-      // whole doubt on this screen is which step the order is on now.
+      // Names the state the seller just moved it to, not a generic "saved" -
+      // the whole doubt on this screen is which step the order is on now.
       toast(`${t('ok.orderUpdated')}: ${t(statusLabelKey(res.order.status))}`)
     } catch (e) {
       if (e instanceof ApiError) setActionErr(e.messageMr ?? e.message)
@@ -147,6 +155,24 @@ export function SellerOrderDetail() {
           <Pill tone={style.tone} icon={style.icon}>{t(statusLabelKey(order.status))}</Pill>
           <strong style={{ fontSize: 'var(--t-lg)' }}><Rupees value={order.total} /></strong>
         </div>
+
+        {/* The seller is being asked to deliver somewhere they have not listed, so the
+            question is put in front of them before Accept. */}
+        {order.outsideArea && (
+          <Notice tone="warn" title={t('ord.outsideArea')}>
+            {t('ord.outsideAreaSub', { pincode: order.pincode })}
+          </Notice>
+        )}
+
+        {/* Accepted, and the buyer has not paid yet. Nothing for the seller to do
+            but wait - and know that is what they are waiting for. */}
+        {waitingForBuyer && order.status === 'ACCEPTED' && (
+          <Notice tone="warn" title={t('ord.awaitingBuyer')}>{t('ord.awaitingBuyerSub')}</Notice>
+        )}
+
+        {waitingForBuyer && order.status === 'PLACED' && (
+          <Notice tone="info">{t('ord.payAfterAccept')}</Notice>
+        )}
 
         {awaitingUpi && (
           <Card className="notice--warn">

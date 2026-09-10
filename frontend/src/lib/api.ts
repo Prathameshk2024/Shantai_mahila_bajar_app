@@ -15,15 +15,29 @@ import type { SlotInfo } from '@shared/seller.js'
 const BASE = import.meta.env.VITE_API_URL ?? ''
 const TOKEN_KEY = 'wb.token'
 
+/**
+ * In memory first; localStorage only carries the token across a reload.
+ *
+ * A phone with site data blocked - or simply full - made every write here a
+ * no-op, and reading the token back out of storage on every request turned
+ * that into: the seller's shop on screen, no token on the wire, and a 401 on
+ * the first thing they tapped. Memory is the source of truth, storage is the
+ * backup.
+ */
+let memoryToken: string | null = null
+
 export function getToken(): string | null {
+  if (memoryToken) return memoryToken
   try {
-    return localStorage.getItem(TOKEN_KEY)
+    memoryToken = localStorage.getItem(TOKEN_KEY)
   } catch {
-    return null
+    /* storage unavailable - memory is the source of truth anyway */
   }
+  return memoryToken
 }
 
 export function setToken(token: string | null): void {
+  memoryToken = token
   try {
     if (token) localStorage.setItem(TOKEN_KEY, token)
     else localStorage.removeItem(TOKEN_KEY)
@@ -43,9 +57,9 @@ export function setToken(token: string | null): void {
  *    `X-Session-Token`. That landed in `wb.token` only. On the next reload
  *    AuthContext wrote the ORIGINAL token back over it, so the window never
  *    actually slid and a seller was signed out exactly seven days after login
- *    however much she had used the app in between;
+ *    however much the seller had used the app in between;
  *  - a 401 cleared `wb.token` and left `wb.session` sitting there, so the UI
- *    still believed she was signed in while every request failed.
+ *    still believed they were signed in while every request failed.
  *
  * So the two events that change a session are published here, and AuthContext
  * is the one place that acts on them. Nothing else clears a session - not a
@@ -105,6 +119,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   const text = await res.text()
 
+  /**
+   * An EMPTY 5xx is not our API answering badly - every failure it raises
+   * carries { error, messageMr, ref }. It is the Vite dev proxy giving up on
+   * localhost:4000, which it reports as a 500 with no body at all, and that
+   * reached the screen as the meaningless "Request failed".
+   */
+  if (!text && !res.ok && res.status >= 500) {
+    throw new ApiError(res.status, {
+      error: `API did not respond (HTTP ${res.status}) - is the backend running on :4000?`,
+      messageMr: 'सर्व्हरशी संपर्क होत नाही. थोड्या वेळाने पुन्हा प्रयत्न करा.',
+    })
+  }
+
   let body: Record<string, unknown> = {}
   if (text) {
     try {
@@ -124,8 +151,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // 401 means the SERVER rejected this token - expired, or signed with a
   // different secret. `requireRole` answers 403 for the wrong role, so this is
   // never "not allowed here"; it is "there is no session any more". Telling
-  // AuthContext is the only way she gets back to the phone screen instead of
-  // tapping a shop that answers 401 to everything.
+  // AuthContext is the only way the seller gets back to the phone screen
+  // instead of tapping a shop that answers 401 to everything.
   if (res.status === 401 && token) {
     setToken(null)
     for (const fn of expiryListeners) fn()
@@ -152,9 +179,10 @@ export const api = {
 
   /**
    * `registered` and `session` are independent on purpose. A customer whose
-   * OTP checked out is authenticated - she gets a session - but she is not
-   * registered until she has given us a name, so both come back together and
-   * the caller decides where she lands. A seller with no record gets
+   * OTP checked out is authenticated - the seller gets a session - but they
+   * are not registered until they have given us a name, so both come back
+   * together and the caller decides where they lands. A seller with no record
+   * gets
    * `registered: false` and no session, because there is nothing to sign in to
    * until the wizard has run.
    */
@@ -204,7 +232,7 @@ export const api = {
   updateMe: (patchBody: Partial<Seller>) =>
     patch<{ seller: Seller }>('/sellers/me', patchBody),
 
-  /** Her buyers, derived from her own orders. Never anybody else's. */
+  /** The seller's buyers, derived from their own orders. Never anybody else's. */
   myBuyers: () => get<{ buyers: SellerBuyer[] }>('/sellers/me/buyers'),
 
   sellerById: (id: string) => get<{ seller: Seller }>(`/sellers/${id}`),
@@ -261,10 +289,10 @@ export const api = {
       nearbyVillages: string[]
     }>(`/catalog/serviceability?pincode=${encodeURIComponent(pincode)}`),
 
-  /* ---------------- her own record ---------------- */
+  /* ---------------- the seller's own record ---------------- */
 
   /**
-   * Her customer record, addresses included. Created empty on first call.
+   * The seller's customer record, addresses included. Created empty on first call.
    *
    * This replaced `addresses()`, which hit an unauthenticated endpoint and
    * returned the same two seeded addresses to everybody.
@@ -290,12 +318,15 @@ export const api = {
     address: { line: string; landmark?: string; pincode: string }
     groups: SellerGroup[]
     paymentMode: 'COD' | 'UPI'
-    paymentUtr?: string
     customerName?: string
   }) => post<{ orders: Order[]; groupId: string }>('/orders', body),
 
   advanceOrder: (id: string, to: Order['status'], extra?: { otp?: string; reason?: string }) =>
     post<{ order: Order }>(`/orders/${id}/advance`, { to, ...extra }),
+
+  /** The buyer paying, after the seller has accepted. */
+  payOrder: (id: string, utr: string) =>
+    post<{ order: Order }>(`/orders/${id}/pay`, { utr }),
 
   confirmPayment: (id: string) => post<{ order: Order }>(`/orders/${id}/confirm-payment`),
 

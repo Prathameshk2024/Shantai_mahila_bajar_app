@@ -7,28 +7,61 @@ import type {
  *
  * Same backend as the seller app - in development Vite proxies /api to
  * localhost:4000, in production VITE_API_URL points at the Render service.
- * Every call carries the admin bearer token; the API rejects anything else
+ * Every call carries they bearer token; the API rejects anything else
  * with 401 at `adminRouter.use(requireRole('admin'))`.
  */
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 const TOKEN_KEY = 'wb.admin.token'
 
+/**
+ * The token lives in MEMORY; localStorage only carries it across a reload.
+ *
+ * Reading it back out of storage on every request made the whole console
+ * depend on a write that can fail silently - blocked site data, private mode,
+ * a full quota, a second tab that 401'd and cleared the key. The failure mode
+ * was the worst one on offer: signed in on screen, because AuthContext holds
+ * the session in React state, and no credentials on the wire, because
+ * getToken() had nothing to read. Every panel answered 401 and the only cure
+ * was a reload, which signed the seller out.
+ */
+let memoryToken: string | null = null
+
 export function getToken(): string | null {
+  if (memoryToken) return memoryToken
   try {
-    return localStorage.getItem(TOKEN_KEY)
+    memoryToken = localStorage.getItem(TOKEN_KEY)
   } catch {
-    return null
+    /* storage unavailable - memory is the source of truth anyway */
   }
+  return memoryToken
 }
 
 export function setToken(token: string | null): void {
+  memoryToken = token
   try {
     if (token) localStorage.setItem(TOKEN_KEY, token)
     else localStorage.removeItem(TOKEN_KEY)
   } catch {
     /* private mode - the session just will not survive a refresh */
   }
+}
+
+/**
+ * A 401 means the session is genuinely dead, and the console has to ACT on it.
+ *
+ * Clearing localStorage on its own was not enough: React still held the
+ * signed-in session, so the shell stayed up and every panel on it re-requested
+ * with no token and got another 401 - a console that looks signed in and
+ * answers nothing, until somebody thinks to reload. Published here, acted on
+ * in AuthContext and nowhere else, the same way the seller app does it.
+ */
+type ExpiryListener = () => void
+const expiryListeners = new Set<ExpiryListener>()
+
+export function onSessionExpired(fn: ExpiryListener): () => void {
+  expiryListeners.add(fn)
+  return () => expiryListeners.delete(fn)
 }
 
 /**
@@ -103,6 +136,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       /* nothing to clean up */
     }
+    for (const fn of expiryListeners) fn()
   }
 
   if (!res.ok) throw new ApiError(res.status, body)
@@ -204,12 +238,12 @@ export const api = {
   grantSlots: (id: string, packs: number) =>
     post<{ seller: Seller }>(`/admin/sellers/${id}/grant-slots`, { packs }),
 
-  /** Takes packs back. Refused by the server if it would drop her below the
-   *  slots she is already using. */
+  /** Takes packs back. Refused by the server if it would drop the seller below the
+   *  slots they are already using. */
   revokeSlots: (id: string, packs: number) =>
     post<{ seller: Seller }>(`/admin/sellers/${id}/revoke-slots`, { packs }),
 
-  /** The reason is shown to her in her own app, so it is not optional noise. */
+  /** The reason is shown to the seller in their own app, so it is not optional noise. */
   blockSeller: (id: string, blocked: boolean, reason?: string) =>
     post<{ seller: Seller }>(`/admin/sellers/${id}/block`, { blocked, reason }),
 

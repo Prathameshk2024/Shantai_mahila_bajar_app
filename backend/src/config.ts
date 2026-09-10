@@ -161,8 +161,8 @@ export const usingCloudinary = cloudinary !== null
 
 /**
  * The key session tokens are signed with. Sessions carry a customer id, and a
- * customer id now unlocks her saved home addresses - so an unsigned token
- * would let anyone read anyone's address by editing a base64 string.
+ * customer id now unlocks the seller's saved home addresses - so an unsigned
+ * token would let anyone read anyone's address by editing a base64 string.
  *
  * Development gets a fixed fallback so the repo still runs with no .env at
  * all. Production does not: booting with a known key would be the same as
@@ -202,11 +202,11 @@ export const SEED_DEMO_DATA = /^(1|true|yes)$/i.test(firstOf('SEED_DEMO_DATA') ?
 /**
  * Which browser origins may call this API.
  *
- * Two front ends share one backend - the seller/customer app and the admin
- * site, deployed separately - so this has to be a LIST. An environment
- * variable is a single string, and handing
- * "https://a.vercel.app,https://b.vercel.app" straight to `cors()` makes it one
- * literal origin that matches neither, blocking both sites at once.
+ * Two front ends share one backend - the seller/customer app and they site,
+ * deployed separately - so this has to be a LIST. An environment variable is a
+ * single string, and handing "https://a.vercel.app,https://b.vercel.app"
+ * straight to `cors()` makes it one literal origin that matches neither,
+ * blocking both sites at once.
  *
  * Unset means "any origin", which is what lets a fresh clone run with no
  * configuration at all. In production that is too open, so index.ts warns.
@@ -363,6 +363,20 @@ export const ADMIN_BOOTSTRAP = readAdminBootstrap()
  */
 export const ALLOW_DEV_RESET =
   !IS_PROD && /^(1|true|yes)$/i.test(firstOf('ALLOW_DEV_RESET') ?? '')
+
+/**
+ * Lets one write delete more than half of a collection.
+ *
+ * Off, and it stays off in production too - unlike ALLOW_DEV_RESET, because
+ * the one time this mattered it mattered on the live database. `purge:demo`
+ * and any other deliberate clear-out is expected to set it for that one run:
+ *
+ *   ALLOW_BULK_DELETE=true npm run purge:demo -- --commit
+ *
+ * See the dead-man's switch in db/firestore.ts for what it turns off, and why
+ * that guard exists at all.
+ */
+export const ALLOW_BULK_DELETE = /^(1|true|yes)$/i.test(firstOf('ALLOW_BULK_DELETE') ?? '')
 
 export function describeConfig(): string {
   const lines = [

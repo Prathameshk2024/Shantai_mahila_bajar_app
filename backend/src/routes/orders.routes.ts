@@ -1,6 +1,10 @@
 import { Router } from 'express'
 import type { Order, OrderStatus, PaymentMode, SellerGroup } from '@shared/types.js'
-import { actionFor, canTransition, initialPaymentStatus } from '@shared/orderFlow.js'
+import {
+  actionFor, awaitingCustomerPayment, awaitingPaymentConfirmation, canTransition,
+  initialPaymentStatus,
+} from '@shared/orderFlow.js'
+import { isMaharashtraPincode } from '@shared/seller.js'
 import { getDb, save } from '../db/store.js'
 import { recordOrderCustomer } from '../db/customers.js'
 import { newShortId } from '../db/ids.js'
@@ -51,9 +55,9 @@ ordersRouter.get('/:id', requireRole('seller', 'customer'), (req, res) => {
    * food needs to be able to ring the woman making it, and this route already
    * refuses anyone who is not one of the two parties, three lines up.
    *
-   * It used to be withheld until she ACCEPTED, which is exactly backwards -
-   * the gap between placing and accepting is the window in which a buyer most
-   * needs to reach her.
+   * It used to be withheld until the seller ACCEPTED, which is exactly
+   * backwards - the gap between placing and accepting is the window in which a
+   * buyer most needs to reach them.
    */
   const seller = db.sellers.find((s) => s.id === order.sellerId)
   res.json({
@@ -79,7 +83,6 @@ interface PlaceBody {
   address: { line: string; landmark?: string; pincode: string }
   groups: SellerGroup[]
   paymentMode: PaymentMode
-  paymentUtr?: string
   customerName?: string
   sourceShareCode?: string
 }
@@ -112,13 +115,22 @@ ordersRouter.post('/', requireRole('customer'), (req, res) => {
       })
       return
     }
-    if (!seller.pincodes.includes(b.address.pincode)) {
+    /**
+     * The seller's listed areas are a hint now, not a gate.
+     *
+     * Anywhere in Maharashtra the order goes to the seller and they decide -
+     * the list was one pincode written at registration, and refusing 413002
+     * because they typed 413004 threw away orders they would have taken.
+     * Outside Maharashtra is still refused here, before them sees it.
+     */
+    if (!isMaharashtraPincode(b.address.pincode)) {
       res.status(409).json({
-        error: 'Not serviceable',
-        messageMr: `${seller.shopName} या पिनकोडमध्ये पोहोचवत नाहीत`,
+        error: 'Outside Maharashtra',
+        messageMr: 'सध्या महाराष्ट्रातच पोहोचवले जाते',
       })
       return
     }
+    const outsideArea = !seller.pincodes.includes(b.address.pincode)
 
     const items = g.items.map((i) => {
       const product = db.products.find((p) => p.id === i.productId)
@@ -165,9 +177,9 @@ ordersRouter.post('/', requireRole('customer'), (req, res) => {
       total: itemsTotal + deliveryFee,
       paymentMode: b.paymentMode,
       paymentStatus: initialPaymentStatus(b.paymentMode),
-      paymentUtr: b.paymentMode === 'UPI' ? b.paymentUtr : undefined,
       status: 'PLACED',
       placedAt: now,
+      outsideArea: outsideArea || undefined,
       events: [{ to: 'PLACED', at: now, by: 'customer' }],
       sourceShareCode: b.sourceShareCode,
     }
@@ -177,8 +189,9 @@ ordersRouter.post('/', requireRole('customer'), (req, res) => {
     if (order.sourceShareCode === seller.shopSlug) seller.qrOrders += 1
   }
 
-  // Remember who she is and where she asked for it. A cart split across three
-  // sellers is three orders but one customer, so this runs once on the first.
+  // Remember who the seller is and where they asked for it. A cart split
+  // across three sellers is three orders but one customer, so this runs once
+  // on the first.
   if (created[0]) recordOrderCustomer(db, created[0])
 
   save()
@@ -215,6 +228,22 @@ ordersRouter.post('/:id/advance', requireRole('seller'), (req, res) => {
     return
   }
 
+  /**
+   * The gate that makes "pay after acceptance" safe.
+   *
+   * The seller accepts an order they have not been paid for - that is the
+   * whole point, because the buyer pays once they have said yes. Packing is
+   * where it stops: nothing leaves their kitchen until they have seen the
+   * money in their own UPI app and pressed "payment received".
+   */
+  if (to === 'PACKED' && awaitingPaymentConfirmation(order)) {
+    res.status(409).json({
+      error: 'Payment not confirmed yet',
+      messageMr: 'पैसे आल्याची खात्री केल्यावरच पुढे जा',
+    })
+    return
+  }
+
   order.status = to
   order.events.push({
     to,
@@ -224,11 +253,53 @@ ordersRouter.post('/:id/advance', requireRole('seller'), (req, res) => {
   })
 
   // Cash is collected at the doorstep, so delivery and collection are the same
-  // moment. UPI is confirmed separately, by her, before she packs.
+  // moment. UPI is confirmed separately, by the seller, before them packs.
   if (to === 'DELIVERED' && order.paymentMode === 'COD') {
     order.paymentStatus = 'COD_COLLECTED'
   }
 
+  save()
+  res.json({ order })
+})
+
+/**
+ * The buyer paying, after the seller has accepted.
+ *
+ * This is what used to happen at checkout. It is a claim, not a verified
+ * payment - the seller confirms it they below - but it is a claim made against
+ * a real order they have agreed to deliver, with the order id in the UPI note,
+ * so they can match it to a line in their bank statement.
+ */
+ordersRouter.post('/:id/pay', requireRole('customer'), (req, res) => {
+  const db = getDb()
+  const order = db.orders.find(
+    (o) => o.id === req.params.id && o.customerId === req.auth!.customerId,
+  )
+  if (!order) {
+    res.status(404).json({ error: 'Order not found', messageMr: 'ही ऑर्डर सापडली नाही' })
+    return
+  }
+
+  if (!awaitingCustomerPayment(order)) {
+    res.status(409).json({
+      error: `Not awaiting payment (${order.status} / ${order.paymentStatus})`,
+      messageMr: 'या ऑर्डरसाठी आत्ता पैसे भरायचे नाहीत',
+    })
+    return
+  }
+
+  const utr = String(req.body?.utr ?? '').replace(/\s/g, '')
+  if (utr.length < 6) {
+    res.status(400).json({
+      error: 'UTR required',
+      messageMr: 'पेमेंट झाल्यावर मिळणारा क्रमांक टाका',
+      fields: { utr: 'required' },
+    })
+    return
+  }
+
+  order.paymentUtr = utr
+  order.paymentStatus = 'UPI_SUBMITTED'
   save()
   res.json({ order })
 })

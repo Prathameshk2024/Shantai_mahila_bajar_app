@@ -19,13 +19,13 @@ const PHONE = '9822011223'
 
 /** What the widget was asked to do, in order. */
 const calls: string[] = []
-/** Set to make the next verifyOtp fail the way a lost session does. */
-let verifyFails = false
+/** MSG91's message for the next verifyOtp, or null to let it succeed. */
+let verifyFailsWith: string | null = null
 
 function method(name: string) {
   return (_arg: string | null, ok: (v: unknown) => void, fail: (e: unknown) => void) => {
     calls.push(name)
-    if (name === 'verifyOtp' && verifyFails) fail({ message: 'reqId is required.' })
+    if (name === 'verifyOtp' && verifyFailsWith) fail({ message: verifyFailsWith })
     else ok({ message: 'access-token' })
   }
 }
@@ -77,7 +77,7 @@ test('verifying after a send returns the access token our server checks', async 
 })
 
 test("MSG91's own \"reqId is required\" is reported as a lost session too", async () => {
-  verifyFails = true
+  verifyFailsWith = 'reqId is required.'
   await assert.rejects(
     () => widget.verifyWidgetOtp('123456'),
     (e: Error) => e.message === widget.WIDGET_SESSION_LOST,
@@ -91,4 +91,21 @@ test('a refused exchange spends the request, so send again opens a new one', asy
   calls.length = 0
   await widget.retryWidgetOtp(PHONE)
   assert.deepEqual(calls, ['sendOtp'], 'a spent request must not be retried')
+})
+
+test('"otp already verifed" spends the request, and send again fetches a new code', async () => {
+  // The answer to the first attempt never arrived - the API was down - so
+  // MSG91 has the request verified and will not do it again. Retrying against
+  // it sends an SMS whose code is refused, which is the worst of both.
+  await widget.sendWidgetOtp(PHONE)
+  verifyFailsWith = 'otp already verifed'
+  await assert.rejects(
+    () => widget.verifyWidgetOtp('123456'),
+    (e: Error) => e.message === widget.WIDGET_SESSION_LOST,
+  )
+
+  verifyFailsWith = null
+  calls.length = 0
+  await widget.retryWidgetOtp(PHONE)
+  assert.deepEqual(calls, ['sendOtp'], 'a verified request must not be retried')
 })

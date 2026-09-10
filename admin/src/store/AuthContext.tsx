@@ -1,7 +1,7 @@
 import {
-  createContext, useCallback, useContext, useMemo, useState, type ReactNode,
+  createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode,
 } from 'react'
-import { api, getToken, setToken, type AdminSession } from '../lib/api.js'
+import { api, getToken, onSessionExpired, setToken, type AdminSession } from '../lib/api.js'
 import { useToast } from './ToastContext.js'
 import { useI18n } from '../i18n/I18nProvider.js'
 
@@ -41,8 +41,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { t } = useI18n()
   const [session, setSession] = useState<AdminSession | null>(storedSession)
 
+  // The api client has just been told the token is dead. This is the only
+  // place that turns that into "you are signed out" - without it the shell
+  // stays on screen re-requesting with no credentials.
+  useEffect(() => onSessionExpired(() => setSession(null)), [])
+
   const signIn = useCallback(async (email: string, password: string) => {
     const res = await api.signIn(email, password)
+    // A 200 with no token would sign the seller in with no credentials: the
+    // shell renders and every panel on it answers 401. Fail on the sign-in
+    // screen, where the message can still be read, rather than one screen
+    // later.
+    if (!res.session?.token) throw new Error('The server did not return a session token')
     setToken(res.session.token)
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify(res.session))
@@ -55,8 +65,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(() => {
     // Tell the server first - the request reads the token before it is
-    // cleared. Not awaited: she must end up signed out on this desk whether or
-    // not the network cooperates, and the session idles out on its own.
+    // cleared. Not awaited: the seller must end up signed out on this desk
+    // whether or not the network cooperates, and the session idles out on its
+    // own.
     void api.logout().catch(() => {
       /* offline - nothing more this side can do */
     })

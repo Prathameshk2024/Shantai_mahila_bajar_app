@@ -45,11 +45,11 @@ export interface Msg91WidgetConfig {
  * hosted flow, so the template and sender ID are theirs, not ours.
  *
  * That moves sending AND checking into the browser, which is normally the one
- * thing this file refuses to allow. What makes it safe is that the widget hands
- * the browser a signed JWT rather than a verdict, and the JWT means nothing
- * until this server exchanges it with MSG91 for the number it was issued for.
- * The browser never gets to assert "she passed"; it can only carry a token we
- * re-check with the auth key it does not have.
+ * thing this file refuses to allow. What makes it safe is that the widget
+ * hands the browser a signed JWT rather than a verdict, and the JWT means
+ * nothing until this server exchanges it with MSG91 for the number it was
+ * issued for. The browser never gets to assert "the seller passed"; it can
+ * only carry a token we re-check with the auth key it does not have.
  *
  *   browser: widget sends + collects the code -> access-token (JWT)
  *   browser: POST /api/auth/otp/verify { phone, code: <access-token> }
@@ -57,8 +57,8 @@ export interface Msg91WidgetConfig {
  *
  * The last step is the whole security of it, and the phone comparison below is
  * the part that is easy to leave out: a token proves that SOME number was
- * verified, and without checking WHICH, anyone could verify their own phone and
- * then send somebody else's in the body.
+ * verified, and without checking WHICH, anyone could verify their own phone
+ * and then send somebody else's in the body.
  */
 export function msg91WidgetProvider(cfg: Msg91WidgetConfig): OtpProvider {
   return {
@@ -86,14 +86,16 @@ export function msg91WidgetProvider(cfg: Msg91WidgetConfig): OtpProvider {
           /**
            * The code matters more than the message. MSG91 answers 200 with
            * "AuthenticationFailure" for two completely different faults, and
-           * only `code` separates them:
-           *   418  API Security: this server's IP is not on the auth key's
-           *        whitelist. MSG91 never looks at the token, so it fails
-           *        identically for every code, on every phone, for ever - and
-           *        reads on screen as "that OTP is wrong". A day was spent on
-           *        that once. Dashboard -> username -> Authkey -> Actions.
-           *   201  OUR auth key is wrong or deleted - nobody can ever log in
-           *   701  "invalid access-token". The ONLY one of these that is
+           * only `code` separates them: 418 API Security: this server's IP is
+           * not on the auth key's whitelist. MSG91 never looks at the token,
+           * so it fails identically for every code, on every phone, for ever -
+           * and reads on screen as "that OTP is wrong". A day was spent on
+           * that once. Dashboard -> username -> Authkey -> Actions. 701 the
+           * token is bad, expired, or already spent. The only one of these the
+           * seller can cause, and the one that means the flow is working -
+           * MSG91 got as far as looking at the token. 201 OUR auth key is
+           * wrong or deleted - nobody can ever log in 701 "invalid
+           * access-token". The ONLY one of these that is
            *        ordinary: the key was accepted and the token itself is bad
            *        or expired, which is what a mistyped code looks like.
            *        Seeing 701 for a bogus token is how you prove a new auth
@@ -116,9 +118,9 @@ export function msg91WidgetProvider(cfg: Msg91WidgetConfig): OtpProvider {
           return false
         }
 
-        // On success `message` carries the identifier the token was issued for,
-        // with the country code: "919822011223". samePhone normalises both
-        // sides, so a token for another number simply does not match.
+        // On success `message` carries the identifier the token was issued
+        // for, with the country code: "919822011223". samePhone normalises
+        // both sides, so a token for another number simply does not match.
         const mine = samePhone(body.message, phone)
 
         // This branch used to answer 401 and log nothing, which reads from the

@@ -175,6 +175,37 @@ test('one subject being blocked does not block anybody else', () => {
   assert.equal(hit('otp:verify:phone:9764455661', limit).ok, true)
 })
 
+test('a number gets three codes a day, and the fourth is refused', () => {
+  /**
+   * Three per number per twenty-four hours, and every SMS counts against it -
+   * the first send and every "send again" alike, because each one is a message
+   * somebody pays for.
+   *
+   * This limit is only real if the widget path goes through /auth/otp/send as
+   * well. It does not deliver anything there - the browser already sent the
+   * SMS - so it was skipped for a while, and while it was skipped this rule
+   * existed only as a sentence in a comment. Auth.tsx now calls it BEFORE
+   * asking the widget to send, which is the difference between a limit and a
+   * counter.
+   */
+  const limit = LIMITS.otpSendPerPhone
+  const now = Date.now()
+
+  assert.equal(limit.max, 3)
+  assert.equal(limit.windowMs, 24 * 60 * 60 * 1000)
+
+  for (let i = 0; i < limit.max; i++) {
+    assert.equal(hit('otp:send:phone:9764455662', limit, now).ok, true, `code ${i + 1}`)
+  }
+
+  const fourth = hit('otp:send:phone:9764455662', limit, now)
+  assert.equal(fourth.ok, false)
+  assert.ok(fourth.retryAfterSec > 20 * 60 * 60, 'she is told to come back tomorrow, not in a minute')
+
+  // And tomorrow she can, because a quota is not a ban.
+  assert.equal(hit('otp:send:phone:9764455662', limit, now + limit.windowMs + 1).ok, true)
+})
+
 test('expired windows are swept, so the limiter is not a log of everyone who tried', () => {
   const now = Date.now()
   hit('otp:send:phone:9822011223', LIMITS.otpSendPerPhone, now)

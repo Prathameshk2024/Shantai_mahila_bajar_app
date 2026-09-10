@@ -1,6 +1,6 @@
 import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
-import { firebase } from '../config.js'
+import { ALLOW_BULK_DELETE, firebase } from '../config.js'
 import type { Db } from './seed.js'
 
 /**
@@ -29,10 +29,11 @@ import type { Db } from './seed.js'
 
 /**
  * `addresses` is deliberately absent. It used to hold two seeded demo
- * addresses that every customer was shown as if they were her own; addresses
- * now live inside each customer document. Dropping the name from this list
- * stops the collection being read or diffed - the existing documents are left
- * in Firestore untouched, so restoring this entry is the whole rollback.
+ * addresses that every customer was shown as if they were the customer's own;
+ * addresses now live inside each customer document. Dropping the name from
+ * this list stops the collection being read or diffed - the existing documents
+ * are left in Firestore untouched, so restoring this entry is the whole
+ * rollback.
  */
 const COLLECTIONS = [
   'sellers', 'products', 'orders', 'payments', 'customers',
@@ -122,12 +123,41 @@ export async function seedInto(data: Db): Promise<void> {
  * Persist only what changed since the last write.
  * Returns how many documents were written and deleted, for the log line.
  */
-export async function persistDiff(data: Db): Promise<{ written: number; deleted: number }> {
+/**
+ * THE DEAD-MAN'S SWITCH
+ * =====================
+ * On 10 September 2026 every seller and every product vanished from Firestore:
+ * six real women and thirteen listings, deleted in one batch because something
+ * handed `persistDiff` an in-memory database with those two arrays empty. The
+ * diff did exactly what it is written to do. Nothing was wrong with it, and
+ * that is the problem - a whole collection disappearing is indistinguishable
+ * here from a legitimate edit.
+ *
+ * They were recovered only because Firestore keeps one hour of version history
+ * even with point-in-time recovery disabled. An hour later there would have
+ * been nothing to recover.
+ *
+ * So: no single write may take out more than half a collection. Removing one
+ * product of twenty-four is ordinary; removing twenty of them is not something
+ * this application ever legitimately does in one step.
+ *
+ * `before > 5` keeps the rule out of the way of genuinely small collections,
+ * where "half" is one or two documents and clearing them is routine. A seeded
+ * database with three sellers can still be emptied.
+ */
+export function isBulkDelete(doomed: number, before: number): boolean {
+  return before > 5 && doomed > before / 2
+}
+
+export async function persistDiff(
+  data: Db,
+): Promise<{ written: number; deleted: number; refused: number }> {
   const fs = getFirestoreDb()
   let batch = fs.batch()
   let pending = 0
   let written = 0
   let deleted = 0
+  let refused = 0
 
   async function flushIfFull() {
     if (++pending >= 450) {
@@ -149,16 +179,33 @@ export async function persistDiff(data: Db): Promise<{ written: number; deleted:
         await flushIfFull()
       }
     }
-    for (const id of before.keys()) {
-      if (!after.has(id)) {
-        batch.delete(fs.collection(name).doc(id))
-        deleted++
-        await flushIfFull()
-      }
+
+    const doomed = [...before.keys()].filter((id) => !after.has(id))
+
+    if (isBulkDelete(doomed.length, before.size) && !ALLOW_BULK_DELETE) {
+      // Refused. The documents stay in Firestore, so `persisted` must keep
+      // claiming they exist - otherwise the next diff would forget them and
+      // this collection would drift out of sync with the server for good.
+      const kept = new Map(after)
+      for (const id of doomed) kept.set(id, before.get(id)!)
+      persisted.set(name, kept)
+
+      console.error(
+        `[firestore] REFUSED to delete ${doomed.length}/${before.size} docs in ${name}. ` +
+          'Nothing was deleted. If this is deliberate, re-run with ALLOW_BULK_DELETE=true.',
+      )
+      refused += doomed.length
+      continue
+    }
+
+    for (const id of doomed) {
+      batch.delete(fs.collection(name).doc(id))
+      deleted++
+      await flushIfFull()
     }
     persisted.set(name, after)
   }
 
   if (pending > 0) await batch.commit()
-  return { written, deleted }
+  return { written, deleted, refused }
 }

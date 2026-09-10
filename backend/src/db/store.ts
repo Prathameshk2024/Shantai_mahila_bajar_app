@@ -153,9 +153,17 @@ export async function flush(): Promise<void> {
   }
   writing = true
   try {
-    const { written, deleted } = await persistDiff(db)
+    const { written, deleted, refused } = await persistDiff(db)
     if (written || deleted) {
       console.log(`[firestore] wrote ${written}, deleted ${deleted}`)
+    }
+    if (refused) {
+      // Loud, and every time - a refusal means memory and the server now
+      // disagree, and the reason for that disagreement is still unfixed.
+      console.error(
+        `[firestore] ${refused} deletion(s) refused by the bulk-delete guard. ` +
+          'Something emptied a collection in memory; find it before trusting this process.',
+      )
     }
   } catch (err) {
     console.error('[firestore] persist failed:', (err as Error).message)

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { categoryPhoto } from '../lib/categoryPhoto.js'
 import { imageCache } from '../lib/imageCache.js'
 import { cloudinaryThumb } from '../lib/upload.js'
 
@@ -16,12 +17,15 @@ import { cloudinaryThumb } from '../lib/upload.js'
 export default function ProductImage({
   src,
   emoji,
+  categoryId,
   size,
   rounded = 'var(--r-sm)',
   className,
 }: {
   src?: string
   emoji: string
+  /** The seller's category, so a listing with no photo borrows the category's. */
+  categoryId?: string
   /** Square side in px. Omit to fill the parent (used by the 1:1 card top). */
   size?: number
   rounded?: string
@@ -63,6 +67,23 @@ export default function ProductImage({
     : { width: '100%', aspectRatio: '1', borderRadius: rounded }
 
   if (!src || failed || !url) {
+    // A photograph of the seller's category beats an emoji, and it is a
+    // bundled asset, so it needs no cache, no request and cannot itself fail
+    // to load.
+    const stockPhoto = categoryPhoto(categoryId)
+    if (stockPhoto) {
+      return (
+        <img
+          className={className}
+          src={stockPhoto}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          style={{ ...box, objectFit: 'cover' }}
+        />
+      )
+    }
+
     return (
       <div
         className={className}

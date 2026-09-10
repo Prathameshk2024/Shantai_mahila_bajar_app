@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import type { Product, Seller } from '@shared/types.js'
+import type { Category, Product, Seller } from '@shared/types.js'
 import { useI18n, useT } from '../../i18n/I18nProvider.js'
 import { useCart } from '../../store/CartContext.js'
 import ProductImage from '../../components/ProductImage.js'
 import { Avatar } from '../../components/Avatar.js'
 import { api } from '../../lib/api.js'
+import { categoryPhoto } from '../../lib/categoryPhoto.js'
 import {
   AppBar, Button, Card, EmptyState, Loading, Notice, Pill,
   Rupees, SectionTitle, Stepper, TextInput, useAsync,
@@ -15,10 +16,36 @@ import {
 } from '../../components/icons.js'
 import { PageTour } from '../../components/Walkthrough.js'
 
+/**
+ * The picture on a category tile: a photograph where we have one, the emoji
+ * where we do not. Both are the same height, so a mixed grid still lines up.
+ */
+function CategoryTileArt({ category }: { category: Category }) {
+  const photo = categoryPhoto(category.id)
+  if (!photo) {
+    return <div style={{ fontSize: '2.25rem', height: 72, lineHeight: '72px' }} aria-hidden="true">{category.icon}</div>
+  }
+  return (
+    <img
+      src={photo}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      style={{ width: '100%', height: 72, objectFit: 'cover', borderRadius: 'var(--r-sm)' }}
+    />
+  )
+}
+
 function ProductCard({ product, onOpen }: { product: Product; onOpen: () => void }) {
   return (
     <button className="pcard" onClick={onOpen}>
-      <ProductImage src={product.imageUrl} emoji={product.emoji} className="pcard__img" rounded="0" />
+      <ProductImage
+        src={product.imageUrl}
+        emoji={product.emoji}
+        categoryId={product.categoryId}
+        className="pcard__img"
+        rounded="0"
+      />
       <div className="pcard__body">
         <div className="pcard__name">{product.name}</div>
         <div className="pcard__price"><Rupees value={product.price} /></div>
@@ -30,7 +57,6 @@ function ProductCard({ product, onOpen }: { product: Product; onOpen: () => void
 export function Explore() {
   const t = useT()
   const nav = useNavigate()
-  const { lang } = useI18n()
   const [q, setQ] = useState('')
 
   // Deliberately NOT filtered by pincode. Browsing is for discovery, and a
@@ -39,7 +65,6 @@ export function Explore() {
   // checkout, and per seller, where it can be explained rather than silently
   // shortening the list.
   const [data, loading] = useAsync(() => api.catalog(), [])
-  const [catData] = useAsync(() => api.categories(), [])
 
   const products = data?.products ?? []
   const list = products.filter((p) =>
@@ -58,24 +83,15 @@ export function Explore() {
           aria-label={t('common.search')}
         />
 
-        <div className="hscroll" data-wt="ex-cats">
-          {(catData?.categories ?? []).slice(0, 8).map((c) => (
-            <button
-              key={c.id}
-              className="card card--tap"
-              style={{ width: 96, textAlign: 'center', padding: 'var(--s3)' }}
-              onClick={() => nav(`/shop/c/${c.id}`)}
-            >
-              <div style={{ fontSize: '1.75rem' }} aria-hidden="true">{c.icon}</div>
-              <div className="tiny" style={{ fontWeight: 600, marginTop: 4 }}>
-                {lang === 'mr' ? c.mr : c.en}
-              </div>
-            </button>
-          ))}
-        </div>
+        {/* The category strip lived here and is gone: it duplicated the
+            Categories tab a thumb's width below it, and cost the products the
+            top half of the screen to do it. */}
 
         <div data-wt="ex-grid">
-          <SectionTitle>{q ? t('common.search') : t('cus.homemade')}</SectionTitle>
+          {/* Only search results get a heading. The default grid is the whole
+              point of the screen, so a label above it named the obvious and
+              pushed the first row of products further down the phone. */}
+          {q && <SectionTitle>{t('common.search')}</SectionTitle>}
           {loading ? (
             <Loading />
           ) : list.length === 0 ? (
@@ -116,7 +132,7 @@ export function Categories() {
                 style={{ textAlign: 'center' }}
                 onClick={() => nav(`/shop/c/${c.id}`)}
               >
-                <div style={{ fontSize: '2.25rem' }} aria-hidden="true">{c.icon}</div>
+                <CategoryTileArt category={c} />
                 <div style={{ fontWeight: 700, marginTop: 6 }}>{lang === 'mr' ? c.mr : c.en}</div>
               </button>
             ))}
@@ -190,6 +206,7 @@ export function ProductDetail() {
           <ProductImage
             src={product.imageUrl}
             emoji={product.emoji}
+            categoryId={product.categoryId}
             rounded="var(--r-lg)"
           />
         </div>
@@ -268,10 +285,10 @@ export function ProductDetail() {
 }
 
 /**
- * Who made this. Not a link any more - the public storefront it opened was
- * the landing page for the share QR, and that whole surface is gone. Her name,
- * her village and her SMB ID still belong on the product, because they are
- * what a buyer is choosing between.
+ * Who made this. Not a link any more - the public storefront it opened was the
+ * landing page for the share QR, and that whole surface is gone. The
+ * customer's name, their village and SMB ID still belong on the product,
+ * because they are what a buyer is choosing between.
  */
 function SellerCard({ seller }: { seller: Partial<Seller> }) {
   const t = useT()

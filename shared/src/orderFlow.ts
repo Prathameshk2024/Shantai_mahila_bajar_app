@@ -9,7 +9,7 @@ import type { Order, OrderStatus, PaymentMode, PaymentStatus } from './types.js'
  *
  * DELIVERED is the end. There was a COMPLETED after it, and it meant nothing
  * to either side: the seller had already handed the goods over and been paid,
- * the customer already had them, and no screen offered a way to reach it - so
+ * they already had them, and no screen offered a way to reach it - so
  * every real order sat at DELIVERED with one greyed-out step below it,
  * implying something was still outstanding when nothing was.
  *
@@ -17,7 +17,7 @@ import type { Order, OrderStatus, PaymentMode, PaymentStatus } from './types.js'
  * because a cash order and a UPI order have to walk the same six screens.
  * Inserting a payment state into the middle is the change that would break it.
  *
- * There is no delivery OTP. The seller marks DELIVERED herself and that is
+ * There is no delivery OTP. The seller marks DELIVERED they and that is
  * accepted at face value; the trail in `events` is what admin reviews if a
  * customer disputes it. (The login OTP is a different thing entirely and is
  * still required - see backend/src/services/otp.service.ts.)
@@ -116,5 +116,35 @@ export function customerCanCancel(status: OrderStatus): boolean {
 }
 
 export function initialPaymentStatus(mode: PaymentMode): PaymentStatus {
-  return mode === 'UPI' ? 'UPI_SUBMITTED' : 'COD_PENDING'
+  return mode === 'UPI' ? 'UPI_PENDING' : 'COD_PENDING'
+}
+
+/**
+ * MONEY AFTER ACCEPTANCE, NOT BEFORE.
+ *
+ * A buyer used to pay at checkout, before the seller had seen the order. Now
+ * that their delivery-area list is a hint rather than a gate, rejection is a
+ * normal outcome - and a rejected prepaid order leaves the money in they
+ * account with no refund path in this app.
+ *
+ * So the order reaches the seller's unpaid, and these two say whose turn it is.
+ */
+
+/** The seller's turn is done: the buyer owes the money and can pay it now. */
+export function awaitingCustomerPayment(
+  o: Pick<Order, 'paymentMode' | 'paymentStatus' | 'status'>,
+): boolean {
+  return o.paymentMode === 'UPI' && o.paymentStatus === 'UPI_PENDING' && o.status === 'ACCEPTED'
+}
+
+/**
+ * The seller has not been paid yet, so they do not pack.
+ *
+ * A typed reference number is a claim, not money - only the seller's own
+ * confirmation, made after looking at their UPI app, counts.
+ */
+export function awaitingPaymentConfirmation(
+  o: Pick<Order, 'paymentMode' | 'paymentStatus'>,
+): boolean {
+  return o.paymentMode === 'UPI' && o.paymentStatus !== 'UPI_CONFIRMED'
 }

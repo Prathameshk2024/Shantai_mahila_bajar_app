@@ -52,7 +52,7 @@ const mr: Record<string, string> = {
   'ok.otpSent': 'OTP पाठवला',
   'ok.qrSaved': 'पेमेंट QR जतन झाला',
 
-  // ---- what happened while she was away --------------------------------
+  // ---- what happened while the seller was away --------------------------------
   'notif.title': 'सूचना',
   'notif.new': 'नवीन',
   'notif.unread': '{n} नवीन सूचना',
@@ -60,7 +60,7 @@ const mr: Record<string, string> = {
   'notif.noneSub': 'तुमच्या ऑर्डरमध्ये बदल झाला की तो इथे दिसेल.',
 
   /* Updates are read by a person, not by the state machine: a whole
-     sentence about HER order, in her own direction of the transaction. */
+     sentence about HER order, in the seller's own direction of the transaction. */
   'notif.cus.ACCEPTED': 'तुमची ऑर्डर स्वीकारली आहे',
   'notif.cus.PACKED': 'तुमची ऑर्डर तयार झाली आहे',
   'notif.cus.OUT_FOR_DELIVERY': 'तुमची ऑर्डर पोहोचवायला निघाली आहे',
@@ -75,7 +75,7 @@ const mr: Record<string, string> = {
   'pay.notNeededSub': 'तुमच्याकडे अजून {n} जागा शिल्लक आहेत. त्या भरल्यावर ₹50 भरून आणखी 5 जागा घ्या.',
   'prod.rejectedRemovalIn': 'आणखी {n} तासांनी हे उत्पादन काढून टाकले जाईल',
 
-  /* What the office did to her account. Slots, not packs - a pack is our word. */
+  /* What the office did to the seller's account. Slots, not packs - a pack is our word. */
   'notif.adm.SLOTS_GRANTED': 'तुम्हाला {n} नवीन जागा मिळाल्या आहेत',
   'notif.adm.SLOTS_REVOKED': 'तुमच्या {n} जागा काढून घेतल्या आहेत',
   'notif.adm.PAYMENT_APPROVED': 'तुमचा ₹50 चा भरणा मंजूर झाला — {n} जागा मिळाल्या',
@@ -129,8 +129,9 @@ const mr: Record<string, string> = {
   // ---- landing: how it works / why / categories / cta -------------------
   'lp.loginShort': 'लॉगिन',
   // The Marathi tagline rhymes on purpose - गावाची / जगाची. A line that scans
-  // is a line she repeats to a neighbour, which is how this app spreads in a
-  // village. The English line below is deliberately NOT a translation of it.
+  // is a line the seller repeats to a neighbour, which is how this app spreads
+  // in a village. The English line below is deliberately NOT a translation of
+  // it.
   'lp.heroA': 'कला तुमच्या गावाची,',
   'lp.heroB': 'बाजारपेठ डिजिटल जगाची.',
   'lp.heroLede': 'पापड, लोणची, मसाले, हस्तकला — गावातल्या महिला उत्तम वस्तू बनवतात. शांताई महिला बाजार त्या वस्तू थेट ग्राहकांपर्यंत पोहोचवतो. मधले दलाल नाहीत, पैसे थेट तिच्या खात्यात.',
@@ -293,7 +294,7 @@ const mr: Record<string, string> = {
   'biz.blockedBody': 'प्रशासनाने तुमचे खाते बंद केले आहे. तुमची उत्पादने ग्राहकांना दिसत नाहीत आणि नवीन ऑर्डर येणार नाहीत. मदतीसाठी संपर्क करा.',
   'biz.blockedReason': 'कारण',
 
-  // ---- her buyers -----------------------------------------------------
+  // ---- the seller's buyers -----------------------------------------------------
   'buy.title': 'माझे ग्राहक',
   'buy.tile': 'माझे ग्राहक',
   'buy.none': 'अजून कोणी ऑर्डर केलेली नाही',
@@ -374,8 +375,8 @@ const mr: Record<string, string> = {
   'pin.check': 'तपासा',
   'pin.invalid': '6 अंकी पिनकोड टाका',
   'pin.deliverTo': 'इथे डिलिव्हरी',
-  'pin.noService': 'या भागात अजून सेवा नाही',
-  'pin.noServiceBody': 'तुमच्या पिनकोडमध्ये सध्या कोणतीही विक्रेती पोहोचवत नाही.',
+  'pin.noService': 'तुमच्या भागाची नोंद कोणी केलेली नाही',
+  'pin.noServiceBody': 'तरीही तुम्ही ऑर्डर करू शकता — महाराष्ट्रात कुठेही ऑर्डर विक्रेतीकडे जाते आणि पोहोचवू शकतात का ते त्या ठरवतात.',
   'pin.availableIn': 'सध्या इथे उपलब्ध',
   'pin.serviceable': '{sellers} विक्रेत्या · {products} वस्तू उपलब्ध',
   'pin.needed': 'वस्तू पाहण्यासाठी आधी पिनकोड टाका',
@@ -392,17 +393,26 @@ const mr: Record<string, string> = {
   'cus.choosePayment': 'पैसे कसे द्याल?', 'cus.payCod': 'वस्तू मिळाल्यावर रोख',
   'cus.payUpi': 'UPI ने आताच', 'cus.payUpiSub': 'विक्रेतीच्या खात्यात थेट',
   'cus.payTo': 'यांना पैसे द्या', 'cus.payNow': 'पैसे द्या',
-  'cus.scanToPay': 'हा QR स्कॅन करून पैसे भरा',
-  'cus.askSellerFirst': 'पैसे भरण्यापूर्वी विक्रेतीला फोन करा आणि ही ऑर्डर घेता येईल का ते विचारा. त्या हो म्हणाल्यावरच पैसे भरा आणि ऑर्डर द्या.',
   'cus.enterUtr': 'पेमेंटचा संदर्भ क्रमांक', 'cus.orderPlaced': 'ऑर्डर झाली!',
   'cus.orderPlacedNote': 'विक्रेतीला तुमची ऑर्डर मिळाली आहे. ती लवकरच संपर्क करेल.',
   'cus.trackOrder': 'ऑर्डर कुठे आहे?', 'cus.myOrders': 'माझ्या ऑर्डर',
   'cus.fromSeller': 'यांच्याकडून',
   'cus.perSellerNote': 'वेगवेगळ्या विक्रेत्यांच्या वस्तू असल्याने प्रत्येकीची ऑर्डर वेगळी होईल.',
   'cus.veg': 'शाकाहारी', 'cus.nonveg': 'मांसाहारी',
-  'cus.notServiceable': 'या पिनकोडमध्ये पोहोचवत नाहीत',
+  'cus.askSeller': 'या पिनकोडची नोंद त्यांच्याकडे नाही. ऑर्डर त्यांच्याकडे जाईल आणि पोहोचवू शकतात का ते त्या ठरवतील.',
+  'cus.outsideState': 'सध्या फक्त महाराष्ट्रात पोहोचवले जाते.',
+  'ord.outsideArea': 'तुमच्या नोंदवलेल्या भागाबाहेर',
+  'ord.awaitingBuyer': 'ग्राहकाच्या पैशांची वाट पाहत आहे',
+  'ord.awaitingBuyerSub': 'तुम्ही ऑर्डर स्वीकारली आहे. ग्राहक पैसे भरतील, ते आल्यावर तुम्ही पुढे जाऊ शकता.',
+  'ord.payAfterAccept': 'तुम्ही स्वीकारल्यानंतर ग्राहक पैसे भरतील.',
+  'cus.payAfterAcceptTitle': 'आधी विक्रेती ठरवतील',
+  'cus.payAfterAccept': 'विक्रेतीने ऑर्डर स्वीकारल्यावरच पैसे भरायचे आहेत. आत्ता काही भरू नका.',
+  'cus.payNowTitle': 'आता पैसे भरा',
+  'cus.paidSubmit': 'पैसे भरले, पुढे पाठवा',
+  'cus.paymentChecking': 'विक्रेती पैसे आले का ते तपासत आहेत',
+  'ord.outsideAreaSub': 'पिनकोड {pincode}. तुम्ही तिथे पोहोचवू शकत असाल तरच ऑर्डर स्वीकारा.',
 
-  // ---- her saved addresses -------------------------------------------
+  // ---- the seller's saved addresses -------------------------------------------
   'cus.savedAddresses': 'तुमचे पत्ते',
   'cus.addAddress': 'नवीन पत्ता जोडा',
   'cus.firstAddress': 'वस्तू कुठे पोहोचवायच्या?',
@@ -455,8 +465,8 @@ const mr: Record<string, string> = {
   'help.call': 'फोन करा', 'help.complaint': 'तक्रार नोंदवा',
 
   /* ---- page walkthroughs ---------------------------------------------
-     One per bottom tab. Written as instructions to her, not as a tour of
-     the software: what the control is FOR, and what happens when she taps
+     One per bottom tab. Written as instructions to the seller, not as a tour of
+     the software: what the control is FOR, and what happens when they tap
      it. Each one names something that is on the screen behind the ring. */
   'wt.title': 'ॲप कसे वापरायचे',
   'wt.sub': 'प्रत्येक पान कसे वापरायचे ते पहा',
@@ -587,10 +597,10 @@ const en: Record<string, string> = {
   'notif.cus.REJECTED': 'The seller could not take this order',
   'notif.cus.CANCELLED': 'Your order was cancelled',
   'notif.sel.PLACED': 'You have a new order',
-  'notif.sel.CANCELLED': 'The customer cancelled the order',
+  'notif.sel.CANCELLED': 'They cancelled the order',
   'prod.rejectedRemoval': 'This product is removed automatically after {n} hours',
   'pay.notNeeded': 'Nothing to pay right now',
-  'cus.callSeller': 'Call the seller',
+  'cus.callSeller': 'Call they',
   'pay.notNeededSub': 'You still have {n} free slots. Pay ₹50 for 5 more once they are full.',
   'prod.rejectedRemovalIn': 'This product will be removed in {n} hours',
 
@@ -796,7 +806,7 @@ const en: Record<string, string> = {
   'biz.blockedBody': 'An administrator has blocked your account. Your products are hidden from customers and no new orders will arrive. Please contact support.',
   'biz.blockedReason': 'Reason',
 
-  // ---- her buyers -----------------------------------------------------
+  // ---- the seller's buyers -----------------------------------------------------
   'buy.title': 'My Buyers',
   'buy.tile': 'My Buyers',
   'buy.none': 'No one has ordered yet',
@@ -875,8 +885,8 @@ const en: Record<string, string> = {
   'pin.check': 'Check',
   'pin.invalid': 'Enter a 6 digit pincode',
   'pin.deliverTo': 'Delivering to',
-  'pin.noService': 'Not available in your area yet',
-  'pin.noServiceBody': 'No seller currently delivers to your pincode.',
+  'pin.noService': 'No seller has listed your area',
+  'pin.noServiceBody': 'You can still order - anywhere in Maharashtra the order goes to the seller and she decides whether she can deliver.',
   'pin.availableIn': 'Currently available in',
   'pin.serviceable': '{sellers} sellers · {products} items available',
   'pin.needed': 'Enter your pincode to see products',
@@ -892,17 +902,26 @@ const en: Record<string, string> = {
   'cus.choosePayment': 'How will you pay?', 'cus.payCod': 'Cash when it arrives',
   'cus.payUpi': 'Pay now by UPI', 'cus.payUpiSub': 'Straight to the seller',
   'cus.payTo': 'Pay this seller', 'cus.payNow': 'Pay now',
-  'cus.scanToPay': 'Scan this QR to pay',
-  'cus.askSellerFirst': 'Before you pay, call the seller and ask whether she can take this order. Pay and place the order only after she says yes.',
   'cus.enterUtr': 'Payment reference number', 'cus.orderPlaced': 'Order placed!',
-  'cus.orderPlacedNote': 'The seller has your order and will be in touch shortly.',
+  'cus.orderPlacedNote': 'They have your order and will be in touch shortly.',
   'cus.trackOrder': 'Track order', 'cus.myOrders': 'My orders',
   'cus.fromSeller': 'From',
   'cus.perSellerNote': 'Your items are from different sellers, so each one becomes a separate order.',
   'cus.veg': 'Veg', 'cus.nonveg': 'Non-veg',
-  'cus.notServiceable': 'does not deliver to this pincode',
+  'cus.askSeller': 'has not listed this pincode. The order still goes to her and she decides whether she can deliver.',
+  'cus.outsideState': 'Delivery is inside Maharashtra only for now.',
+  'ord.outsideArea': 'Outside your listed areas',
+  'ord.awaitingBuyer': 'Waiting for her payment',
+  'ord.awaitingBuyerSub': 'You have accepted the order. She pays now - once the money is in, you can carry on.',
+  'ord.payAfterAccept': 'She pays after you accept.',
+  'cus.payAfterAcceptTitle': 'They decide first',
+  'cus.payAfterAccept': 'You pay only after she accepts the order. Nothing to pay now.',
+  'cus.payNowTitle': 'Pay now',
+  'cus.paidSubmit': 'I have paid',
+  'cus.paymentChecking': 'She is checking that the money arrived',
+  'ord.outsideAreaSub': 'Pincode {pincode}. Accept only if you can get there.',
 
-  // ---- her saved addresses -------------------------------------------
+  // ---- the seller's saved addresses -------------------------------------------
   'cus.savedAddresses': 'Your addresses',
   'cus.addAddress': 'Add another address',
   'cus.firstAddress': 'Where should we deliver?',

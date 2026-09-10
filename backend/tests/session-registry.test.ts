@@ -148,7 +148,7 @@ test('pruning drops what nothing can use, and keeps recent revocations', () => {
   assert.ok(!ids.includes(longRevoked.id), 'an old revocation is gone')
 })
 
-test('the admin ceiling is far shorter than the seller one', () => {
+test('the admin ceiling is far shorter than them one', () => {
   // The role that releases money should not hold a session for three months.
   const now = Date.now()
   const db = emptyDb()

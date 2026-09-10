@@ -45,7 +45,7 @@ const windows = new Map<string, Window>()
  */
 export const LIMITS = {
   /** One SMS every 30s per number is the existing rule; these are the ceilings. */
-  otpSendPerPhone: { max: 5, windowMs: 60 * 60 * 1000 },
+  otpSendPerPhone: { max: 3, windowMs: 24 * 60 * 60 * 1000 },
   /** Stops somebody walking through numbers to burn the SMS budget. */
   otpSendPerIp: { max: 20, windowMs: 60 * 60 * 1000 },
   /** A 6-digit code is a million guesses; ten tries an hour makes that hopeless. */

@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { Address, Seller } from '@shared/types.js'
-import { STATUS_STYLE, statusLabelKey } from '@shared/orderFlow.js'
-import { buildUpiLink } from '@shared/seller.js'
+import {
+  STATUS_STYLE, awaitingCustomerPayment, statusLabelKey,
+} from '@shared/orderFlow.js'
+import { buildUpiLink, isMaharashtraPincode } from '@shared/seller.js'
 import { useT } from '../../i18n/I18nProvider.js'
 import { useAuth } from '../../store/AuthContext.js'
 import { useCart } from '../../store/CartContext.js'
@@ -13,8 +15,8 @@ import QrCode from '../../components/QrCode.js'
 import { Avatar } from '../../components/Avatar.js'
 import { AddressForm } from '../../components/AddressForm.js'
 import {
-  AppBar, Button, Card, Choice, EmptyState, Field, LanguagePicker, Loading, Notice,
-  Pill, Rupees, SectionTitle, Stepper, TextInput, VoiceInput, useAsync,
+  AppBar, Button, Card, Choice, CopyValue, EmptyState, Field, LanguagePicker, Loading,
+  Notice, Pill, Rupees, SectionTitle, Stepper, TextInput, VoiceInput, useAsync,
 } from '../../components/ui.js'
 import { Timeline } from '../seller/Orders.js'
 import {
@@ -176,7 +178,6 @@ export function Checkout() {
   const [addingAddress, setAddingAddress] = useState(false)
   const [savingAddress, setSavingAddress] = useState(false)
   const [mode, setMode] = useState<'COD' | 'UPI'>('COD')
-  const [utr, setUtr] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
@@ -187,7 +188,7 @@ export function Checkout() {
   const customer = customerData?.customer
   const addresses: Address[] = customer?.addresses ?? []
 
-  /** Save a newly typed address, then select it so she can carry straight on. */
+  /** Save a newly typed address, then select it so the customer can carry straight on. */
   async function saveAddress(input: Parameters<typeof api.addAddress>[0]) {
     setSavingAddress(true)
     setErr('')
@@ -207,17 +208,25 @@ export function Checkout() {
   const groups = groupBySeller(sellers)
   const address =
     addresses.find((a) => a.id === addressId) ??
-    // She already told us her pincode on Explore - default to the address that
-    // matches it rather than making her pick again.
+    // They already told us their pincode on Explore - default to the address
+    // that matches it rather than making their pick again.
     addresses.find((a) => a.pincode === savedPincode) ??
     addresses.find((a) => a.isDefault) ??
     addresses[0]
   const grand = groups.reduce((n, g) => n + g.total, 0)
 
-  // Serviceability is re-checked on the server too; this is the friendly warning.
-  const unserviceable = groups.filter(
+  /**
+   * Not in the customer's listed areas is a WARNING now, not a wall.
+   *
+   * Inside Maharashtra the order goes to the customer and they decide, so the
+   * button stays live and the buyer is told what to expect. Outside
+   * Maharashtra the server refuses it, so the button does not pretend
+   * otherwise.
+   */
+  const outsideArea = groups.filter(
     (g) => address && !(g.seller?.pincodes ?? []).includes(address.pincode),
   )
+  const outsideState = !!address && !isMaharashtraPincode(address.pincode)
 
   async function place() {
     if (!address) return
@@ -228,10 +237,9 @@ export function Checkout() {
         address: { line: address.line, landmark: address.landmark, pincode: address.pincode },
         groups,
         paymentMode: mode,
-        paymentUtr: mode === 'UPI' ? utr : undefined,
-        // Her stored name first: the session falls back to the ग्राहक
-        // placeholder, and sending that would overwrite nothing but tell the
-        // seller nothing either.
+        // The customer's stored name first: the session falls back to the
+        // ग्राहक placeholder, and sending that would overwrite nothing but
+        // tell the seller nothing either.
         customerName: customer?.name || session?.name || t('common.customer'),
       })
       clear()
@@ -254,7 +262,7 @@ export function Checkout() {
           </SectionTitle>
 
           {/*
-            Her first order has no address to pick, so the form IS the step.
+            The customer's first order has no address to pick, so the form IS the step.
             Before customers had records of their own this screen showed two
             seeded addresses belonging to nobody, and there was no way to enter
             one - an empty picker here would simply block checkout.
@@ -289,9 +297,11 @@ export function Checkout() {
           )}
         </div>
 
-        {unserviceable.length > 0 && (
+        {outsideState && <Notice tone="danger">{t('cus.outsideState')}</Notice>}
+
+        {!outsideState && outsideArea.length > 0 && (
           <Notice tone="warn">
-            {unserviceable.map((g) => g.seller?.shopName).join(', ')} — {t('cus.notServiceable')}
+            {outsideArea.map((g) => g.seller?.shopName).join(', ')} — {t('cus.askSeller')}
           </Notice>
         )}
 
@@ -309,73 +319,11 @@ export function Checkout() {
           </div>
         </div>
 
-        {/* One payment block per seller. The link is generated from HER UPI ID
-            with the amount already in it, so the customer cannot mistype it. */}
-        {mode === 'UPI' && (
-          <div className="stack-sm">
-            {groups.map((g) => {
-              // Her own uploaded QR wins over the one this app draws: it is
-              // the code printed in her shop, so it is the one she recognises
-              // if a buyer ever rings to ask whether the payment reached her.
-              const herQr = g.seller?.upiQrUrl
-              const ready = (!!g.seller?.upiQrReady || !!herQr) && !!g.seller?.upiId
-              const link = buildUpiLink({
-                upiId: g.seller?.upiId ?? '',
-                name: g.seller?.shopName,
-                amount: g.total,
-                note: 'Shantai Mahila Bazar order',
-              })
-              return (
-                <Card key={g.sellerId}>
-                  <div className="row-between" style={{ marginBottom: 'var(--s3)' }}>
-                    <div className="row">
-                      <Avatar name={g.seller?.shopName ?? g.seller?.name} size={40} />
-                      <div>
-                        <div className="small dim">{t('cus.payTo')}</div>
-                        <strong>{g.seller?.shopName}</strong>
-                      </div>
-                    </div>
-                    <strong><Rupees value={g.total} /></strong>
-                  </div>
-                  {ready ? (
-                    <>
-                      {herQr ? (
-                        <img
-                          src={herQr}
-                          alt={t('cus.payTo')}
-                          style={{ width: 170, margin: '0 auto', borderRadius: 'var(--r-sm)' }}
-                        />
-                      ) : (
-                        <QrCode value={link} size={150} label={t('cus.payTo')} />
-                      )}
-                      <div className="tiny dim center" style={{ marginTop: 6 }}>{g.seller?.upiId}</div>
-                      {/* No "pay now" link any more. Tapping straight through to
-                          a UPI app paid a woman who may not be able to make the
-                          order at all - she has no way to refund, so the money
-                          sits with her and the buyer is the one chasing it.
-                          Ring her first, pay second. */}
-                      <Notice tone="warn" title={t('cus.scanToPay')}>
-                        {t('cus.askSellerFirst')}
-                      </Notice>
-                    </>
-                  ) : (
-                    /* She has not set her payment QR up yet, so there is
-                       nothing real to show. Say so instead of drawing a code. */
-                    <Notice tone="warn">{t('qrpay.notSetUp')}</Notice>
-                  )}
-                </Card>
-              )
-            })}
-            <Field label={t('cus.enterUtr')} required>
-              <TextInput
-                inputMode="numeric"
-                value={utr}
-                onChange={(e) => setUtr(e.target.value.replace(/\s/g, ''))}
-                placeholder="512309887711"
-              />
-            </Field>
-          </div>
-        )}
+        {/* NOTHING IS PAID HERE ANY MORE.
+            The buyer pays after the seller has accepted - their area list is a
+            hint now, so a rejection is ordinary, and a rejected prepaid order
+            leaves the money with a woman who has no way to send it back. */}
+        {mode === 'UPI' && <Notice tone="info">{t('cus.payAfterAccept')}</Notice>}
 
         <Card>
           <div className="row-between">
@@ -395,7 +343,7 @@ export function Checkout() {
       <div className="actionbar">
         <Button
           onClick={() => void place()}
-          disabled={busy || !address || unserviceable.length > 0 || (mode === 'UPI' && utr.length < 6)}
+          disabled={busy || !address || outsideState}
         >
           {busy ? t('common.loading') : t('cus.placeOrder')}
         </Button>
@@ -483,7 +431,11 @@ export function TrackOrder() {
   const { orderId } = useParams()
   const t = useT()
   const nav = useNavigate()
-  const [data, loading] = useAsync(() => api.order(orderId!), [orderId])
+  const { toast } = useToast()
+  const [data, loading, setData] = useAsync(() => api.order(orderId!), [orderId])
+  const [utr, setUtr] = useState('')
+  const [payErr, setPayErr] = useState('')
+  const [paying, setPaying] = useState(false)
 
   if (loading) return <><AppBar title="" onBack={() => nav(-1)} /><div className="screen"><Loading /></div></>
   if (!data) return <><AppBar title="" onBack={() => nav(-1)} /><div className="screen"><EmptyState title="—" /></div></>
@@ -491,15 +443,33 @@ export function TrackOrder() {
   const order = data.order
   const seller = data.seller
 
+  async function pay() {
+    if (utr.trim().length < 6) {
+      setPayErr(t('cus.enterUtr'))
+      return
+    }
+    setPaying(true)
+    setPayErr('')
+    try {
+      await api.payOrder(order.id, utr.trim())
+      setData(await api.order(order.id))
+      toast(t('ok.paymentSubmitted'))
+    } catch (e) {
+      setPayErr(e instanceof ApiError ? (e.messageMr ?? e.message) : 'Network error')
+    } finally {
+      setPaying(false)
+    }
+  }
+
   return (
     <>
       <AppBar title={`${t('ord.order')} ${order.id}`} onBack={() => nav(-1)} />
       <div className="screen stack">
         <Card><Timeline order={order} /></Card>
 
-        {/* Her number is on the ORDER, never on the catalogue: it appears once
+        {/* The customer's number is on the ORDER, never on the catalogue: it appears once
             there is a transaction between them, and only to the person who
-            placed it. A buyer waiting on food she has already paid for should
+            placed it. A buyer waiting on food they have already paid for should
             not have to go through us to ask when it is coming. */}
         {seller && (
           <Card>
@@ -527,6 +497,72 @@ export function TrackOrder() {
               </div>
             )}
           </Card>
+        )}
+
+        {/* WHOSE TURN IT IS.
+            Nothing is paid at checkout any more: the order reaches the customer's unpaid, customer accepts if they can deliver, and the money is asked for here. */}
+        {order.paymentMode === 'UPI' && order.status === 'PLACED' && (
+          <Notice tone="info" title={t('cus.payAfterAcceptTitle')}>{t('cus.payAfterAccept')}</Notice>
+        )}
+
+        {awaitingCustomerPayment(order) && (
+          <Card>
+            <SectionTitle>{t('cus.payNowTitle')}</SectionTitle>
+            <div className="stack-sm">
+              {/* The customer's own uploaded QR beside the generated one, not instead of
+                  it: the printed code is the one they recognises, and only the
+                  generated link carries the amount and the order id. */}
+              {seller?.upiQrUrl && (
+                <img
+                  src={seller.upiQrUrl}
+                  alt={t('cus.payTo')}
+                  style={{ width: 170, margin: '0 auto', borderRadius: 'var(--r-sm)' }}
+                />
+              )}
+              {seller?.upiId ? (
+                <>
+                  <QrCode
+                    value={buildUpiLink({
+                      upiId: seller.upiId,
+                      name: seller.shopName,
+                      amount: order.total,
+                      note: `Shantai Mahila Bazar ${order.id}`,
+                      ref: order.id,
+                    })}
+                    size={170}
+                    label={t('cus.payTo')}
+                  />
+                  {/* Copyable, not just printed. Paying from this same phone
+                      means there is no second screen to scan the QR with, so
+                      the ID has to be retyped into the bank app - and a UPI ID
+                      wrong by one character pays a stranger with no way back. */}
+                  <CopyValue value={seller.upiId} />
+                </>
+              ) : (
+                <Notice tone="warn">{t('qrpay.notSetUp')}</Notice>
+              )}
+
+              <Field label={t('cus.enterUtr')} error={payErr} required htmlFor="orderUtr">
+                <TextInput
+                  id="orderUtr"
+                  inputMode="numeric"
+                  value={utr}
+                  error={!!payErr}
+                  onChange={(e) => { setUtr(e.target.value.replace(/\s/g, '')); setPayErr('') }}
+                  placeholder="512309887711"
+                />
+              </Field>
+              <Button onClick={() => void pay()} disabled={paying}>
+                {paying ? t('common.loading') : t('cus.paidSubmit')}
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {order.paymentMode === 'UPI' && order.paymentStatus === 'UPI_SUBMITTED' && (
+          <Notice tone="warn" title={t('cus.paymentChecking')}>
+            {t('pay.utr')}: <span className="num">{order.paymentUtr}</span>
+          </Notice>
         )}
 
         <Card>
@@ -568,7 +604,7 @@ export function CustomerProfile() {
   const customer = data?.customer
   const addresses = customer?.addresses ?? []
 
-  /** Every mutation re-reads her record, so the list can never drift. */
+  /** Every mutation re-reads the customer's record, so the list can never drift. */
   async function run(action: () => Promise<unknown>) {
     setBusy(true)
     try {
@@ -585,9 +621,9 @@ export function CustomerProfile() {
     <>
       <AppBar brand title={t('prof.title')} />
       <div className="screen stack">
-        {/* Her name is registration data, not a display string, so it is
-            editable here and written back to her customer record. The seller
-            reads it on every order she places. */}
+        {/* The customer's name is registration data, not a display string, so it is
+            editable here and written back to their customer record. They
+            reads it on every order they places. */}
         <Card data-wt="cprof-name">
           <div className="row">
             <div className="tile__img" style={{ width: 56, height: 56, fontSize: '1.75rem' }}>
@@ -727,7 +763,7 @@ export function CustomerProfile() {
           )}
         </Card>
 
-        {/* Help & Training for the shopper: the same four tabs she has at
+        {/* Help & Training for the shopper: the same four tabs the customer has at
             the bottom of the screen, each one replayed on the real page. */}
         <div>
           <SectionTitle>{t('wt.title')}</SectionTitle>

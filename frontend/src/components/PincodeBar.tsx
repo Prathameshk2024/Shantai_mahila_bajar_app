@@ -5,11 +5,11 @@ import { Button, Field, Notice, TextInput } from './ui.js'
 import { IconCheck, IconMap } from './icons.js'
 
 /**
- * The one place a customer enters her pincode.
+ * The one place a customer enters the seller's pincode.
  *
  * Once set it lives in PincodeContext and is reused by the catalog, the
- * product list and checkout, so she is never asked for it twice. Tapping the
- * chip re-opens it if she has moved.
+ * product list and checkout, so the seller is never asked for it twice.
+ * Tapping the chip re-opens it if they have moved.
  */
 export default function PincodeBar() {
   const t = useT()
@@ -96,8 +96,11 @@ export default function PincodeBar() {
         </div>
       </button>
 
+      {/* Not a refusal any more: nobody has LISTED the seller's area, and an order
+          anywhere in Maharashtra still reaches a seller who decides. Saying
+          "not available" here contradicted a checkout that goes through. */}
       {info && !info.serviceable && (
-        <Notice tone="warn" title={t('pin.noService')}>
+        <Notice tone="info" title={t('pin.noService')}>
           {t('pin.noServiceBody')}
           {info.nearbyVillages.length > 0 && (
             <div className="small" style={{ marginTop: 6 }}>

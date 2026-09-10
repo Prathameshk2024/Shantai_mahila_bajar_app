@@ -1,9 +1,9 @@
 import type { Product, ProductStatus, Seller } from './types.js'
 
 /**
- * SUBSCRIPTION + PRODUCT SLOTS
- * 50 rupees buys one PACK = 5 product slots. A 6th product means a second pack.
- * No gateway: she pays the admin's account and admin approves by hand.
+ * SUBSCRIPTION + PRODUCT SLOTS 50 rupees buys one PACK = 5 product slots. A
+ * 6th product means a second pack. No gateway: the seller pays their account
+ * and admin approves by hand.
  */
 
 export const PLAN = {
@@ -16,10 +16,10 @@ export const PLAN = {
 /**
  * Which product states consume a slot.
  *
- * DRAFT deliberately does not, so she can experiment before paying. ARCHIVED
- * does not either, so archiving frees a slot immediately - without that escape
- * hatch a woman with five bad listings is stuck forever and her only option is
- * paying again, which is how you lose her.
+ * DRAFT deliberately does not, so the seller can experiment before paying.
+ * ARCHIVED does not either, so archiving frees a slot immediately - without
+ * that escape hatch a woman with five bad listings is stuck forever and only
+ * option is paying again, which is how you lose they.
  */
 export const SLOT_CONSUMING: ProductStatus[] = ['PENDING', 'LIVE', 'PAUSED', 'REJECTED']
 
@@ -84,7 +84,7 @@ export function isValidPhone(value: string | undefined): boolean {
 export function normalizePhone(value: string | undefined): string {
   const digits = String(value ?? '').replace(/\D/g, '')
   // Strip a country code or a trunk prefix, so the stored number is always the
-  // same ten digits she types at login.
+  // same ten digits the seller types at login.
   if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2)
   if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1)
   return digits
@@ -98,13 +98,14 @@ export function samePhone(a: string | undefined, b: string | undefined): boolean
 }
 
 /**
- * A shop description composed from what she told us at registration.
+ * A shop description composed from what the seller told us at registration.
  *
  * `about` is optional, and most women skip it - it is the one free-text field
- * in a long form, on a phone, in Marathi. Left empty her shop opens with a
- * name and nothing else, which reads to a customer like an abandoned listing.
+ * in a long form, on a phone, in Marathi. Left empty the seller's shop opens
+ * with a name and nothing else, which reads to a customer like an abandoned
+ * listing.
  *
- * This only fills the gap; anything she writes herself replaces it.
+ * This only fills the gap; anything the seller writes they replaces it.
  */
 export function defaultAbout(s: {
   shopName: string
@@ -137,6 +138,25 @@ export function isValidPincode(value: string | undefined): boolean {
   return /^[1-9]\d{5}$/.test(String(value ?? '').trim())
 }
 
+/**
+ * IS THIS SOMEWHERE SHE COULD PLAUSIBLY DELIVER?
+ *
+ * Maharashtra pincodes start 40 through 44. Inside that, the decision is the
+ * seller's: the order reaches them and they accept or rejects it, whatever
+ * their listed delivery areas say - a woman in 413004 knows perfectly well
+ * whether they can reach 413002, and the server guessing on their behalf
+ * refused orders they wanted.
+ *
+ * Outside it, the order is refused before the seller ever sees it.
+ *
+ * 403xxx is the exception: that band is Goa, not Maharashtra, and it sits
+ * inside 40-44 by an accident of postal numbering.
+ */
+export function isMaharashtraPincode(value: string | undefined): boolean {
+  const code = String(value ?? '').trim()
+  return /^4[0-4]\d{4}$/.test(code) && !code.startsWith('403')
+}
+
 /** UPI virtual payment address, e.g. sunita@ybl */
 export function isValidUpi(value: string | undefined): boolean {
   return /^[\w.\-]{2,64}@[a-zA-Z]{2,32}$/.test(String(value ?? '').trim())
@@ -145,9 +165,10 @@ export function isValidUpi(value: string | undefined): boolean {
 /**
  * Build the UPI intent link for an order.
  *
- * Generated from her stored UPI ID rather than the QR image she uploaded,
- * because a generated link carries the exact amount. An uploaded screenshot has
- * no amount in it, so the customer types it by hand and can get it wrong.
+ * Generated from the seller's stored UPI ID rather than the QR image they
+ * uploaded, because a generated link carries the exact amount. An uploaded
+ * screenshot has no amount in it, so they type it by hand and can get it
+ * wrong.
  */
 export function buildUpiLink(opts: {
   upiId: string
@@ -180,10 +201,10 @@ export const EDUCATION_LEVELS: { value: string; mr: string; en: string }[] = [
 /**
  * WHAT SHE MAY CHANGE ABOUT HERSELF, AND WHAT IT HAS TO LOOK LIKE.
  *
- * The allow-list on `PATCH /sellers/me` decides WHICH fields can move - her
- * status, her slots and her SMB ID are not on it and never will be. This
- * decides whether the values she sent make sense, and it runs on both sides
- * for the usual two reasons: the form can say "18 to 90" the instant she types
+ * The allow-list on `PATCH /sellers/me` decides WHICH fields can move - the
+ * seller status, slots and SMB ID are not on it and never will be. This
+ * decides whether the values they sent make sense, and it runs on both sides
+ * for the usual two reasons: the form can say "18 to 90" the instant they type
  * it, and the server can refuse a delivery fee of -500 typed by something that
  * is not the form.
  *
@@ -223,7 +244,7 @@ export function validateSellerProfile(
     if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) f[key as string] = message
   }
 
-  // She delivers to pincodes, so a typo here is an order she never receives.
+  // The seller delivers to pincodes, so a typo here is an order they never receives.
   if (p.pincodes && p.pincodes.some((code) => !isValidPincode(code))) {
     f.pincodes = '6 अंकी पिनकोड टाका'
   }

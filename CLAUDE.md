@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 शांताई महिला बाजार / Shantai Mahila Bazar — a digital marketplace for rural women entrepreneurs in Maharashtra. Three user-facing surfaces, one API:
 
 - **frontend/** — the seller + customer app (React/Vite, also shipped as a Capacitor APK)
-- **admin/** — the admin console (React/Vite, deployed separately)
+- **admin/** — they console (React/Vite, deployed separately)
 - **backend/** — Express API serving all three, including `/api/admin/*`
 - **shared/** — domain types and rules imported by all of the above
 
@@ -46,7 +46,7 @@ cd admin   && node --import tsx --test tests/i18n.test.ts
 
 Vite proxies `/api` to `localhost:4000`, so nothing needs configuring in development. Reseed by deleting `backend/data/db.json` or `POST /api/dev/reset` (404s in production).
 
-Demo logins: any 10-digit number, and the OTP screen **shows you the 6-digit code** — it is a real code that is really checked, so typing anything else is refused. Existing seller `9822011223` (Sunita, SMB-ANADUR-01). A customer phone with no name on record is authenticated but *not registered* — the app sends her to `/register/customer` to give one.
+Demo logins: any 10-digit number, and the OTP screen **shows you the 6-digit code** — it is a real code that is really checked, so typing anything else is refused. Existing seller `9822011223` (Sunita, SMB-ANADUR-01). A customer phone with no name on record is authenticated but *not registered* — the app sends the seller to `/register/customer` to give one.
 
 There is no default admin password any more. Make an account with `npm run admin:users -- create you@example.com "Your Name"`, or set `ADMIN_BOOTSTRAP_EMAIL` + `ADMIN_BOOTSTRAP_PASSWORD_HASH` on a host with no shell.
 
@@ -72,6 +72,7 @@ Consequences that matter when changing anything in `backend/src/`:
 
 - **`initStore()` must finish before the first request.** `index.ts` awaits it.
 - **Writes are diffed, not blanket.** Only changed documents are sent. Do not introduce a code path that rewrites whole collections.
+- **No single persist may delete more than half a collection.** `isBulkDelete()` in `firestore.ts` refuses it, keeps the documents, and logs loudly; `ALLOW_BULK_DELETE=true` on the one command that means it is the override. This exists because on 10 September 2026 a persist whose in-memory `sellers` and `products` were empty deleted six real sellers and thirteen products, recovered only from Firestore's one-hour version history. A refusal means memory and the server disagree — find out why before trusting that process.
 - **This is correct for exactly ONE server process.** Two instances each hold their own snapshot and silently overwrite each other. Render is pinned to one instance; autoscaling must stay off. Outgrowing this means converting route handlers to async per-document reads — real work, not a config change.
 - A Firestore connection failure at boot **falls back to the JSON file** and says so loudly. Reads and writes track the same `firestoreLive` flag so they can never disagree.
 - An empty database stays empty unless `SEED_DEMO_DATA` is set. Never make seeding automatic — it would put invented sellers in front of real customers.
@@ -82,14 +83,14 @@ Firebase is **server-side only**, via `firebase-admin` with a service account. T
 
 `backend/src/auth/` is the whole stack; `middleware/auth.ts` composes it. The token is `base64url({sid, role, iat}).base64url(HMAC(payload))` signed with `SESSION_SECRET`.
 
-**The token carries no identity.** `sid` points at a row in the `sessions` collection, and `req.auth.sellerId` is read from that row on every request — so a token cannot assert an identity the server did not issue, and deleting the row revokes it instantly. That is what makes logout and "her phone was stolen" real.
+**The token carries no identity.** `sid` points at a row in the `sessions` collection, and `req.auth.sellerId` is read from that row on every request — so a token cannot assert an identity the server did not issue, and deleting the row revokes it instantly. That is what makes logout and "the seller's phone was stolen" real.
 
 - `auth/crypto.ts` is the only file that touches `node:crypto`. Every signature is **domain-separated by purpose**, so a registration ticket cannot be presented as a session token.
 - **Registration requires a ticket.** `/sellers/register` takes the phone out of a single-use, 15-minute ticket from `/auth/otp/verify` and *ignores the one in the body*. Without it the endpoint minted a seller session for any phone number anybody typed.
 - **OTP**: two paths, chosen in `config.ts` by which environment variables are set, and both end at the same `/auth/otp/verify`.
   - **MSG91 widget** (`MSG91_AUTH_KEY` + `MSG91_WIDGET_ID`) — what production uses, because it needs no DLT registration. The browser sends *and* checks the code, then hands back a JWT; `otp.providers.ts` trades that JWT for the number it was issued for and **refuses it unless it matches the phone in the request**. That comparison is the whole security of the path — a token only proves *some* number was verified. The frontend half is `lib/msg91Widget.ts`, using `exposeMethods: true` so the app keeps its own OTP screen rather than MSG91's English modal.
   - **Server-side** (no widget configured) — 6 digits from the CSPRNG, stored as an HMAC, single-use, 5-minute TTL, destroyed after 5 wrong guesses. Demo mode returns the code in the response so the app is walkable; it is a real code that is really checked, and production refuses to boot on this path.
-  - `verifyOtp` checks `provider.verify` **before** the six-digit format test — a widget JWT is not six digits, and that ordering is what lets it through. `sendOtp` is a no-op on the widget path; the SMS already went out from the browser, so server-side send rate limits do not apply there.
+  - `verifyOtp` checks `provider.verify` **before** the six-digit format test — a widget JWT is not six digits, and that ordering is what lets it through. `sendOtp` delivers nothing on the widget path - the SMS already went out from the browser - but the app calls `/auth/otp/send` **before** it asks the widget to send, because that route is where the per-number quota is counted. Skipping it made "three codes a day" a comment rather than a limit.
 - **Rate limits** live in `auth/rateLimit.ts`, keyed by *both* subject and IP. This needs `app.set('trust proxy', 1)`; without it Render's balancer makes every request share one address.
 - **Admins** are database records with scrypt hashes (`auth/admins.ts`), managed by `npm run admin:users`. There is no `ADMIN_PASSWORD`.
 - **Idle windows, not absolute**: admin 8h, seller/customer 7 days. Different because the risk differs, and because re-issuing a seller's token costs an SMS. There is also an **absolute** ceiling (admin 7d, others 90d) so a copied token cannot be kept alive forever by being used.
@@ -112,30 +113,30 @@ Locked at six states. **Payment is a separate axis, not a step** — a cash orde
 
 `PATCH /products/:id` is the only way a seller changes a listing after it exists, and it decides one thing: does the edit send the listing back to the admin queue?
 
-`MODERATED_FIELDS` in `products.routes.ts` is the split, and it is by **what the admin was actually looking at when they approved it** — name, picture, category, ingredients, veg/non-veg. Price, stock, unit, MRP and made-to-order are deliberately absent: they change constantly, and pulling a shop off the shelf every time she marks eight jars left instead of ten teaches her to stop keeping the stock honest. `touchesModeratedContent()` compares values rather than keys, because the edit form posts the whole product on every save.
+`MODERATED_FIELDS` in `products.routes.ts` is the split, and it is by **what the admin was actually looking at when they approved it** — name, picture, category, ingredients, veg/non-veg. Price, stock, unit, MRP and made-to-order are deliberately absent: they change constantly, and pulling a shop off the shelf every time they mark eight jars left instead of ten teaches they to stop keeping the stock honest. `touchesModeratedContent()` compares values rather than keys, because the edit form posts the whole product on every save.
 
 `DRAFT → PENDING` and `REJECTED → PENDING` are also allowed here — that is how a draft gets published — and both run the same `listingProblems()` check and slot gate as a new listing. A draft consumes no slot, so publishing one does. Without that gate "save as draft" would be the way around moderation.
 
-The screen is `frontend/src/screens/seller/EditProduct.tsx`, and it is deliberately **not** the wizard: one question per screen is right when the job is teaching her what a listing needs, and wrong when she came to fix one number. `isFood` is immutable — it picks the category set and stamps the FSSAI licence, so changing it re-files the product under a licence nobody checked it against.
+The screen is `frontend/src/screens/seller/EditProduct.tsx`, and it is deliberately **not** the wizard: one question per screen is right when the job is teaching the seller what a listing needs, and wrong when they came to fix one number. `isFood` is immutable — it picks the category set and stamps the FSSAI licence, so changing it re-files the product under a licence nobody checked it against.
 
 ### The upload wizard's draft
 
-A half-filled product is written to `localStorage` so that leaving the screen — most often to change the language from her profile — does not throw the work away. `frontend/src/screens/seller/productDraft.ts` owns it.
+A half-filled product is written to `localStorage` so that leaving the screen — most often to change the language from the seller's profile — does not throw the work away. `frontend/src/screens/seller/productDraft.ts` owns it.
 
 The key is `wb.draft.product.<sellerId>` and the seller id is **also stored inside the payload**. The first version used one shared key, and on a field coordinator's phone, where seller after seller registers on the same handset, the next woman opened "New product" and found a stranger's photo on step 1. Nothing is written until `hasStarted()` is true, so opening the wizard and walking away leaves no trace, and `readDraft` deletes the old unkeyed `wb.draft.product` on sight.
 
 ### Product photos
 
-`PhotoPicker` takes **one photo, from the gallery, and nothing else**. The camera button and the emoji fallback grid are both gone, so a photo is now required unless Cloudinary is off — the picker reports that upward through `onUnavailable` and the step stops being a wall she cannot pass. Once a photo is in, "choose from gallery" is disabled rather than silently replacing it; the ✕ on the thumbnail is the way to change it. The file input resets its own `value`, or removing a photo and picking the same file again fires no `change` event at all.
+`PhotoPicker` takes **one photo, from the gallery, and nothing else**. The camera button and the emoji fallback grid are both gone, so a photo is now required unless Cloudinary is off — the picker reports that upward through `onUnavailable` and the step stops being a wall the seller cannot pass. Once a photo is in, "choose from gallery" is disabled rather than silently replacing it; the ✕ on the thumbnail is the way to change it. The file input resets its own `value`, or removing a photo and picking the same file again fires no `change` event at all.
 
 ### Slots and subscription
 
-`shared/src/seller.ts`. ₹50 = one pack = 5 product slots, no payment gateway — she pays the admin's UPI and admin approves by hand. `SLOT_CONSUMING` deliberately excludes `DRAFT` (so she can experiment before paying) and `ARCHIVED` (so archiving frees a slot immediately). Validation functions here run on **both** sides: the client for a fast friendly message, the server because the client can lie.
+`shared/src/seller.ts`. ₹50 = one pack = 5 product slots, no payment gateway — the seller pays their UPI and admin approves by hand. `SLOT_CONSUMING` deliberately excludes `DRAFT` (so they can experiment before paying) and `ARCHIVED` (so archiving frees a slot immediately). Validation functions here run on **both** sides: the client for a fast friendly message, server because the client can lie.
 
 ### Other shared modules
 
 - `womenbiz.ts` — the `SMB-<VILLAGE>-<NN>` ID. The serial is **per village**, not global, so the code tells a field coordinator where to go. Non-survey villages are transliterated from Devanagari.
-- `readiness.ts` — Digital Readiness Index. Six factors self-reported at registration (the day-one baseline), four **measured by the platform** from what she actually does. Keep that split; it is what makes the before/after comparison meaningful.
+- `readiness.ts` — Digital Readiness Index. Six factors self-reported at registration (the day-one baseline), four **measured by the platform** from what the seller actually does. Keep that split; it is what makes the before/after comparison meaningful.
 
 ### Config and graceful degradation
 
@@ -162,7 +163,7 @@ From spec section 6, encoded in `frontend/src/styles/theme.css`:
 - Status is colour **+ icon + word**, never colour alone. Every icon carries a word.
 - 16px minimum text, 56px buttons, 44px touch targets.
 - Four bottom tabs, one level deep. **No hamburger menu.**
-- One question per screen in wizards, with progress dots. **Editing is not a wizard** — `EditProduct` puts every field on one page, because four taps between her and a price she came to change is not simplicity.
+- One question per screen in wizards, with progress dots. **Editing is not a wizard** — `EditProduct` puts every field on one page, because four taps between the seller and a price they came to change is not simplicity.
 - Confirmation dialogs state the consequence, never a bare "Are you sure?"
 - Latin digits (₹500, not ५००) — that is what is printed on money.
 - **No web fonts.** Android ships Noto Sans Devanagari, so Marathi renders from system fonts at zero network cost and the APK works offline.
