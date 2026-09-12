@@ -1,4 +1,5 @@
 import type { Product, ProductStatus, Seller } from './types.js'
+import { upiProblem } from './payment.js'
 
 /**
  * SUBSCRIPTION + PRODUCT SLOTS
@@ -48,6 +49,115 @@ export function slotInfo(
     isFull: total > 0 && used >= total,
     almostFull: total > 0 && total - used === 1,
   }
+}
+
+/**
+ * EDITING A PUBLISHED LISTING IS LIMITED. WHY.
+ *
+ * A slot is one listing live at a time, so editing never wins a seller a
+ * second listing - but it does let one paid slot become an endless stream of
+ * different products: mango pickle in summer, lemon pickle in winter, out of
+ * one ₹50 pack for ever. Two edits is the line between fixing a listing and
+ * replacing it.
+ *
+ * PRICE AND STOCK ARE DELIBERATELY EXEMPT. They change with the market and
+ * with what is left on the shelf, and a seller who has spent her two edits
+ * cannot be left unable to correct a price - she would stop keeping either
+ * number honest, which costs the buyer and the platform more than a rotated
+ * listing ever could.
+ */
+export const MAX_EDITS = 2
+
+/**
+ * The fields that spend an edit. Everything absent from this list - price,
+ * stock, pausing, unpausing - stays free for the life of the listing.
+ */
+export const EDIT_COUNTED_FIELDS = [
+  'name', 'nameEn', 'categoryId', 'imageUrl', 'imagePublicId', 'emoji',
+  'ingredients', 'vegType', 'material', 'unit', 'mrp', 'madeToOrder',
+] as const
+
+/**
+ * Did this save change anything an edit is counted for?
+ *
+ * Compares VALUES, not keys: the edit form posts the whole product on every
+ * save, so a seller who opens the screen, changes her mind and saves would
+ * otherwise lose an edit to a save that changed nothing.
+ */
+export function countsAsEdit(
+  before: Partial<Product>,
+  after: Partial<Product>,
+): boolean {
+  return EDIT_COUNTED_FIELDS.some((f) => (f in after) && !sameValue(before[f], after[f]))
+}
+
+/**
+ * Equal for the purpose of spending an edit.
+ *
+ * Blank is blank however it is spelled. A listing from before MRP was
+ * optional carries `undefined` where the form now posts `0`, and whitespace
+ * round a name is not a change to the name - counting either would take an
+ * edit from a seller who changed nothing she can see.
+ */
+function sameValue(a: unknown, b: unknown): boolean {
+  const blank = (v: unknown) =>
+    v === undefined || v === null || v === '' || v === 0 || v === false
+  if (blank(a) || blank(b)) return blank(a) && blank(b)
+  if (typeof a === 'string' && typeof b === 'string') return a.trim() === b.trim()
+  if (typeof a === 'number' || typeof b === 'number') return Number(a) === Number(b)
+  return a === b
+}
+
+/** Edits still available. Listings that predate this rule start with all of them. */
+export function editsLeft(product: Pick<Product, 'editCount'>): number {
+  return Math.max(0, MAX_EDITS - (product.editCount ?? 0))
+}
+
+/**
+ * Only a listing the public can see is rationed.
+ *
+ * A DRAFT is not published yet, and a REJECTED listing is being FIXED - an
+ * admin took it down and told her why, so charging her an edit to answer that
+ * could leave a slot she paid for holding something she is not allowed to
+ * repair.
+ */
+export function editsAreLimited(status: ProductStatus): boolean {
+  return status === 'LIVE' || status === 'PAUSED'
+}
+
+/**
+ * How many listings one pack may ever publish.
+ *
+ * Archiving frees a slot on the spot, which is the escape hatch that stops a
+ * woman with five bad listings being stuck - but without a ceiling it is also
+ * the way around MAX_EDITS: archive, upload again, two fresh edits, for ever.
+ * A pack is five listings at a time and fifteen over its life.
+ */
+export const REPLACEMENTS_PER_SLOT = 2
+
+export function publishAllowance(seller: Pick<Seller, 'packsApproved'>): number {
+  return (seller.packsApproved || 0) * PLAN.slotsPerPack * (1 + REPLACEMENTS_PER_SLOT)
+}
+
+export function publishesLeft(
+  seller: Pick<Seller, 'packsApproved' | 'listingsPublished'>,
+): number {
+  return Math.max(0, publishAllowance(seller) - (seller.listingsPublished ?? 0))
+}
+
+/**
+ * WHERE A LISTING LANDS WHEN SHE PRESSES PUBLISH.
+ *
+ * Never `LIVE`. Listings published themselves for a while, on the grounds that
+ * a moderation queue puts a desk between a seller and her first customer -
+ * true, and outweighed by what is on a listing: a photograph, a price, and on
+ * food an ingredients claim that carries this market's name. Somebody looks
+ * before a shopper does.
+ *
+ * A draft is not a submission, so it lands where she left it.
+ */
+export function initialListingStatus(asDraft: boolean): ProductStatus {
+  return asDraft ? 'DRAFT' : 'PENDING'
 }
 
 export const PRODUCT_STATUS_STYLE: Record<
@@ -156,9 +266,15 @@ export function isMaharashtraPincode(value: string | undefined): boolean {
   return /^4[0-4]\d{4}$/.test(code) && !code.startsWith('403')
 }
 
-/** UPI virtual payment address, e.g. sunita@ybl */
+/**
+ * UPI virtual payment address, e.g. sunita@ybl
+ *
+ * Every caller that only needs yes/no stays on this; `upiProblem` in
+ * payment.js is the same check and says WHICH part is wrong, which is the only
+ * useful thing to put under an input she has already typed once.
+ */
 export function isValidUpi(value: string | undefined): boolean {
-  return /^[\w.\-]{2,64}@[a-zA-Z]{2,32}$/.test(String(value ?? '').trim())
+  return upiProblem(value) === null
 }
 
 /**
@@ -189,8 +305,8 @@ export function buildUpiLink(opts: {
 /** Education options - kept short, and phrased the way a survey would ask. */
 export const EDUCATION_LEVELS: { value: string; mr: string; en: string }[] = [
   { value: 'none', mr: 'शिक्षण नाही', en: 'No formal schooling' },
-  { value: 'primary', mr: '4 थी पर्यंत', en: 'Up to 4th' },
-  { value: 'middle', mr: '7 वी पर्यंत', en: 'Up to 7th' },
+  { value: 'primary', mr: '4 थीपर्यंत', en: 'Up to 4th' },
+  { value: 'middle', mr: '7 वीपर्यंत', en: 'Up to 7th' },
   { value: 'secondary', mr: '10 वी', en: '10th' },
   { value: 'higher', mr: '12 वी', en: '12th' },
   { value: 'graduate', mr: 'पदवी', en: 'Graduate' },
@@ -226,7 +342,12 @@ export function validateSellerProfile(
 
   if (p.age != null && (p.age < 18 || p.age > 90)) f.age = 'वय 18 ते 90 दरम्यान असावे'
   if (p.whatsapp && !isValidPhone(p.whatsapp)) f.whatsapp = '10 अंकी मोबाईल नंबर टाका'
-  if ('upiId' in p && !isValidUpi(p.upiId)) f.upiId = 'UPI आयडी बरोबर नाही'
+  // The reason, not "बरोबर नाही" - a second rejection of the same string with
+  // the same words behind it is where she stops trying and puts in a wrong one.
+  if ('upiId' in p) {
+    const problem = upiProblem(p.upiId)
+    if (problem) f.upiId = problem
+  }
 
   // Money and counts: never negative, and never a number that is not one.
   const positive: [keyof typeof p, string][] = [

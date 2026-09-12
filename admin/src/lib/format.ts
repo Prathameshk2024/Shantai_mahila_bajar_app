@@ -13,11 +13,21 @@ export function rupees(n: number): string {
 /**
  * How long someone has been waiting, short enough for a table cell.
  *
- * Hours up to two days, then days. A payment waiting 74 hours reads as "3 d",
- * which is the number that should alarm somebody.
+ * Minutes under the hour, hours up to two days, then days. A payment waiting
+ * 74 hours reads as "3 d", which is the number that should alarm somebody.
+ *
+ * The minutes matter because of what is on the other end of this number: a
+ * woman who has just sent ₹50 and cannot list anything until somebody here
+ * clicks Approve. Flooring a twenty-minute wait to "0 h" said nothing had
+ * happened yet, on the screen whose whole job is to say that it had.
  */
-export function waited(iso: string, now = Date.now()): { value: number; unit: 'h' | 'd' } {
-  const hours = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 3_600_000))
+export function waited(
+  iso: string,
+  now = Date.now(),
+): { value: number; unit: 'm' | 'h' | 'd' } {
+  const minutes = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60_000))
+  if (minutes < 60) return { value: minutes, unit: 'm' }
+  const hours = Math.floor(minutes / 60)
   return hours < 48 ? { value: hours, unit: 'h' } : { value: Math.floor(hours / 24), unit: 'd' }
 }
 

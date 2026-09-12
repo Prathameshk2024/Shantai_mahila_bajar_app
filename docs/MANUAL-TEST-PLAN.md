@@ -339,7 +339,8 @@ Profile B as a registered customer.
 | ☐ G12 | Open `p3` (stock 0) | Out of stock is stated in **words**, not only by a colour or a disabled button |
 | ☐ G13 | Open `p9` (made to order) | Labelled made-to-order; stock 0 does not read as "unavailable" |
 | ☐ G14 | Look for any seller's **phone number** on a public screen | Never shown — the public view strips it |
-| ☐ G15 | `GET /api/catalog/products/p4` by id via curl | **404** — a pending product is not readable by holding its id |
+| ☐ G15 | Take a **non-LIVE** product id from a seller's own list (`GET /api/products/mine` with her token — a DRAFT, PAUSED or REJECTED one) and fetch it unauthenticated: `curl -i localhost:4000/api/catalog/products/<id>` | **404**, with the same body as a made-up id. Not readable by holding the id, and the 404 does not reveal that the listing exists. Do **not** run this against an id that no longer exists at all — that passes for the wrong reason |
+| ☐ G15a | Block that seller in the admin console, then fetch one of her **LIVE** product ids the same way | 404 as well. Blocking removes her from the list *and* her catalogue from id lookups; `publiclyVisible()` in `catalog.routes.ts` is the one rule both paths use, covered by `backend/tests/catalog-visibility.test.ts` |
 | ☐ G16 | Close a seller's shop, then reload the catalogue | Her products vanish from the public list |
 | ☐ G17 | Open a shop share link (`POST /api/catalog/share/<slug>/scan`) | The scan is recorded (`qrScans` +1) and you land on her shop |
 

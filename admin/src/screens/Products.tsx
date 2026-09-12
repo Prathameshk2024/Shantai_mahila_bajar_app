@@ -10,7 +10,7 @@ import {
   useAsync, useErrorText,
 } from '../components/ui.js'
 
-type Tab = 'LIVE' | 'REJECTED'
+type Tab = 'PENDING' | 'LIVE' | 'REJECTED'
 
 /**
  * Moderation is mostly looking, so the photo leads.
@@ -24,7 +24,7 @@ type Tab = 'LIVE' | 'REJECTED'
  */
 export function Products() {
   const t = useT()
-  const [tab, setTab] = useState<Tab>('LIVE')
+  const [tab, setTab] = useState<Tab>('PENDING')
   const [data, loading, error, reload] = useAsync(() => api.products(tab), [tab])
 
   const rows = data?.products ?? []
@@ -34,6 +34,9 @@ export function Products() {
       <TopBar title={t('pr.title')} />
       <div className="body stack">
         <div className="row wrap">
+          <Button small variant={tab === 'PENDING' ? 'primary' : 'quiet'} onClick={() => setTab('PENDING')}>
+            {t('pr.pendingTab')}
+          </Button>
           <Button small variant={tab === 'LIVE' ? 'primary' : 'quiet'} onClick={() => setTab('LIVE')}>
             {t('pr.liveTab')}
           </Button>
@@ -82,6 +85,13 @@ export function ProductCard({ product, onDone }: { product: ProductRow; onDone: 
    * read and it removes itself 48 hours later. That replaced the delete
    * button, which removed the product on the spot and told her nothing.
    */
+  /**
+   * Nothing a seller writes reaches a shopper until it is published here. She
+   * submits, this screen decides - and a refusal carries a reason she reads in
+   * her own app, because "it never appeared" is the one outcome she cannot act
+   * on.
+   */
+  const pending = product.status === 'PENDING'
   const live = product.status === 'LIVE'
   const rejected = product.status === 'REJECTED'
 
@@ -116,6 +126,7 @@ export function ProductCard({ product, onDone }: { product: ProductRow; onDone: 
             {/* Her words, rendered exactly as she wrote them. */}
             <span className="strong">{product.name}</span>
             {product.isFood && <Pill tone="info">{t('pr.food')}</Pill>}
+            {pending && <Pill tone="warn">{t('pr.pendingTab')}</Pill>}
             {product.status === 'LIVE' && <Pill tone="ok">{t('pr.liveTab')}</Pill>}
             {product.status === 'REJECTED' && <Pill tone="danger">{t('pr.rejectedTab')}</Pill>}
           </div>
@@ -142,10 +153,20 @@ export function ProductCard({ product, onDone }: { product: ProductRow; onDone: 
           )}
         </div>
 
-        {live && !rejecting && (
+        {(pending || live) && !rejecting && (
           <div className="row">
+            {pending && (
+              <Button
+                variant="ok"
+                small
+                disabled={busy}
+                onClick={() => void run(() => api.moderateProduct(product.id, true))}
+              >
+                {t('pr.publish')}
+              </Button>
+            )}
             <Button variant="danger" small disabled={busy} onClick={() => setRejecting(true)}>
-              {t('pr.takeDown')}
+              {pending ? t('pr.reject') : t('pr.takeDown')}
             </Button>
           </div>
         )}

@@ -630,16 +630,60 @@ p, h1, h2, h3, li, span, div { overflow-wrap: anywhere; }
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   overflow: hidden;
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  padding: 0;
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-.pcard:active { background: var(--surface-2); }
+/* The card opens the product; the strip under it adds to the cart. Separate
+   buttons, because one tap must not do both. */
+.pcard__open {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pcard__open:active { background: var(--surface-2); }
+.pcard__add {
+  padding: 0 var(--s3) var(--s3);
+  display: flex;
+  justify-content: stretch;
+}
+.pcard__add > * { flex: 1; }
+
+/* − 2 + : the count where the button was, so she can see what a tap did. */
+.qtybar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  border: 1px solid var(--maroon);
+  border-radius: var(--r);
+  background: var(--maroon-soft);
+  padding: 2px;
+}
+.qtybar__btn {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--maroon);
+  border-radius: var(--r-sm);
+  font-size: 1.1rem;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.qtybar__btn:active { background: rgba(123, 30, 46, 0.12); }
+.qtybar__btn:disabled { opacity: 0.35; cursor: default; }
+.qtybar__n { font-weight: 800; color: var(--maroon); font-size: var(--t-base); }
 .pcard__img { aspect-ratio: 1; background: var(--gold-soft); display: grid; place-items: center; font-size: 2.4rem; }
 .pcard__body { padding: var(--s3); display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
 .pcard__name { font-weight: 700; font-size: var(--t-sm); line-height: 1.35; }
@@ -739,6 +783,17 @@ p, h1, h2, h3, li, span, div { overflow-wrap: anywhere; }
 .stepper button:active { background: var(--surface-2); }
 .stepper button:disabled { color: var(--ink-3); }
 .stepper__v { min-width: 42px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/**
+ * A value and the button that copies it.
+ *
+ * The button is a square at the touch floor and carries no word: labelled, it
+ * was wider than the UPI ID it belonged to, and the ID is the thing she is
+ * meant to read. Centred as a pair, because on the payment screen it sits
+ * under a QR code.
+ */
+.copyrow { display: flex; align-items: center; justify-content: center; gap: var(--s2); flex-wrap: wrap; }
+.copybtn { width: var(--tap); min-width: var(--tap); height: var(--tap); min-height: var(--tap); padding: 0; flex: none; }
 
 .dots { display: flex; gap: 5px; align-items: center; }
 .dots__d { height: 6px; flex: 1; border-radius: 3px; background: var(--line); }

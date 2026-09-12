@@ -30,6 +30,20 @@ export interface Notice {
   /** Key into the dictionary, so the line is written once, in both languages. */
   labelKey: string
   /**
+   * What the row is called. An order names what is IN it - a woman recognises
+   * her pickle order, not SMB5013 - and an admin decision has no product, so
+   * it has none of this and prints its sentence instead.
+   */
+  title?: string
+  /**
+   * Where the order stands NOW - the order's own status, not the last event
+   * the other side caused. On the seller's side those are rarely the same
+   * thing: the only states a customer causes are PLACED and CANCELLED, so a
+   * tag drawn from her buyer's last action said "new order" on every row
+   * forever, including ones she had packed and delivered herself.
+   */
+  status?: OrderStatus
+  /**
    * Who it concerns, when we know. A SELLER's order list carries
    * `customerName`; a customer's carries only `sellerId`, so on her side this
    * is empty and the line names the order instead. Fetching each seller to
@@ -76,12 +90,33 @@ export function noticeLabelKey(status: OrderStatus, role: Role): string {
   return line ?? statusLabelKey(status)
 }
 
+/** What the order is, in the words on the listing. "+2" counts the rest. */
+function itemSummary(o: Order): string {
+  const [first, ...rest] = o.items ?? []
+  if (!first) return o.id
+  return rest.length ? `${first.name} +${rest.length}` : first.name
+}
+
 /**
- * The other side's actions only.
+ * ONE ROW PER ORDER, NOT ONE PER EVENT.
  *
- * A seller does not need telling that she accepted an order two seconds ago,
- * and a customer does not need telling she placed one. Filtering by `by` is
- * what keeps the list to things that happened WHILE SHE WAS NOT LOOKING.
+ * An order that is accepted, packed, sent out and delivered produced four
+ * rows, identical apart from the verb, stacked on top of each other with the
+ * same total repeated four times. A woman opening this wants to know where
+ * her pickle order is - one answer - not to read its history as four separate
+ * announcements. So the row is the ORDER, it is named after what is in it,
+ * and the state moves into a tag that changes as the order walks.
+ *
+ * The other side's actions only. A seller does not need telling that she
+ * accepted an order two seconds ago, and a customer does not need telling she
+ * placed one. Filtering by `by` is what keeps the list to things that happened
+ * WHILE SHE WAS NOT LOOKING.
+ *
+ * Timestamped by the LATEST such event, which is what the bell's count reads:
+ * an order that moves again after she looked counts once, not once per step.
+ *
+ * The TAG, though, is the order's own status rather than that event - see
+ * `Notice.status`. What the row is for is "where is this order now".
  */
 export function buildFeed(orders: Order[], role: Role): Notice[] {
   const mine = role === 'seller' ? 'seller' : 'customer'
@@ -89,17 +124,25 @@ export function buildFeed(orders: Order[], role: Role): Notice[] {
   const out: Notice[] = []
 
   for (const o of orders) {
-    for (const e of o.events ?? []) {
-      if (e.by === mine) continue
-      out.push({
-        id: `${o.id}:${e.to}:${e.at}`,
-        orderId: o.id,
-        at: e.at,
-        labelKey: noticeLabelKey(e.to, role),
-        who: mine === 'seller' ? o.customerName : '',
-        total: o.total,
-      })
-    }
+    const theirs = (o.events ?? [])
+      .filter((e) => e.by !== mine)
+      .sort((a, b) => a.at.localeCompare(b.at))
+
+    const last = theirs[theirs.length - 1]
+    if (!last) continue
+
+    out.push({
+      // The ORDER is the row, so the order id is the key. A second event on
+      // the same order updates this row rather than adding one.
+      id: o.id,
+      orderId: o.id,
+      at: last.at,
+      labelKey: noticeLabelKey(last.to, role),
+      title: itemSummary(o),
+      status: o.status,
+      who: mine === 'seller' ? o.customerName : '',
+      total: o.total,
+    })
   }
 
   return out.sort((a, b) => b.at.localeCompare(a.at))

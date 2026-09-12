@@ -161,7 +161,8 @@ export interface AdminSession {
   email: string
 }
 
-export type PaymentRow = SubscriptionPayment & { waitingHours: number }
+/** The waiting time is computed from `submittedAt` here, so it can tick. */
+export type PaymentRow = SubscriptionPayment
 /** /admin/orders decorates each order with the seller's shop name and id. */
 export type OrderRow = Order & { seller?: string; womenBizId?: string }
 export type ProductRow = Product & { seller?: Seller }

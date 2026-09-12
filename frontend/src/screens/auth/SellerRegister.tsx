@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import type { Seller } from '@shared/types.js'
 import { EDUCATION_LEVELS, isValidPincode, isValidUpi } from '@shared/seller.js'
+import { upiProblem } from '@shared/payment.js'
 import { VILLAGES, makeWomenBizId, villageCode } from '@shared/womenbiz.js'
 import {
   BAND_LABEL, computeReadiness, readinessBand, SELF_REPORTED_FACTORS,
@@ -132,7 +133,12 @@ export default function SellerRegister() {
     if (which === 3 && answered < SELF_REPORTED_FACTORS.length) {
       e.digital = t('common.required')
     }
-    if (which === 4 && !isValidUpi(d.upiId)) e.upiId = t('reg.upiPlaceholder')
+    // The reason, not the example again. "उदा. sunita@ybl" under a box she
+    // has already filled in tells her nothing about what she got wrong.
+    if (which === 4) {
+      const upiFault = upiProblem(d.upiId)
+      if (upiFault) e.upiId = upiFault
+    }
     setErrors(e)
     return Object.keys(e).length === 0
   }

@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import {
-  Navigate, Route, BrowserRouter as Router, Routes, useLocation,
+  Navigate, Route, BrowserRouter as Router, Routes, useLocation, useNavigationType,
 } from 'react-router-dom'
 import type { Role } from '@shared/types.js'
 import { I18nProvider } from './i18n/I18nProvider.js'
@@ -9,6 +9,7 @@ import { ToastProvider } from './store/ToastContext.js'
 import { CartProvider } from './store/CartContext.js'
 import { liveTicket } from './lib/registerTicket.js'
 import { PincodeProvider } from './store/PincodeContext.js'
+import { recallScroll, rememberScroll } from './lib/scrollMemory.js'
 import { CustomerLayout, SellerLayout } from './components/layouts.js'
 
 import Landing from './screens/landing/Landing.js'
@@ -29,7 +30,7 @@ import { MyBuyers } from './screens/seller/MyBuyers.js'
 import PaymentQr from './screens/seller/PaymentQr.js'
 
 import {
-  Categories, CategoryProducts, Explore, ProductDetail,
+  Categories, CategoryProducts, Explore, ProductDetail, SellerShop,
 } from './screens/customer/Browse.js'
 import {
   Cart, Checkout, CustomerOrders, CustomerProfile, OrderPlaced, TrackOrder,
@@ -76,15 +77,54 @@ function RequireTicket({ children }: { children: ReactNode }) {
 }
 
 /**
- * A new screen starts at the top of itself.
+ * A NEW SCREEN STARTS AT THE TOP. THE ONE SHE COMES BACK TO DOES NOT.
  *
- * The browser keeps the scroll position across a route change, so leaving a
- * long page - the catalog, the last step of a form - opened the next one
- * already scrolled to its foot, with the heading somewhere above her thumb.
+ * This began as `scrollTo(0, 0)` on every route change, which fixed the
+ * forward case - a product page opening halfway down because the catalogue
+ * was - and broke the backward one: she scrolled a long way down, opened the
+ * tenth product, pressed back, and the list had forgotten her.
+ *
+ * So the position is saved per history entry and restored on POP only.
+ *
+ * The retries matter as much as the restore. Every screen fetches its own
+ * data, so at the moment she comes back the list is one spinner tall and the
+ * browser clamps any scroll past its height. Asking again over the next
+ * second lets the restore land once the content is actually there, and stops
+ * as soon as it does.
  */
-function ScrollToTop() {
-  const { pathname } = useLocation()
-  useEffect(() => { window.scrollTo(0, 0) }, [pathname])
+function ScrollMemory() {
+  const { key } = useLocation()
+  const navigationType = useNavigationType()
+
+  useEffect(() => {
+    // The browser's own restoration fights this one and loses on a soft
+    // navigation anyway, so take it off.
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
+  }, [])
+
+  useEffect(() => {
+    const onScroll = () => rememberScroll(key, window.scrollY)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      // Leaving is the one moment the position is certainly final.
+      rememberScroll(key, window.scrollY)
+      window.removeEventListener('scroll', onScroll)
+    }
+  }, [key])
+
+  useEffect(() => {
+    const target = navigationType === 'POP' ? recallScroll(key) : 0
+    window.scrollTo(0, target)
+    if (target === 0) return
+
+    let tries = 0
+    const timer = setInterval(() => {
+      if (Math.abs(window.scrollY - target) < 2 || ++tries > 8) return clearInterval(timer)
+      window.scrollTo(0, target)
+    }, 120)
+    return () => clearInterval(timer)
+  }, [key, navigationType])
+
   return null
 }
 
@@ -96,7 +136,7 @@ export default function App() {
         <CartProvider>
           <PincodeProvider>
           <Router>
-            <ScrollToTop />
+            <ScrollMemory />
             <Routes>
               {/* ---- public ---------------------------------------- */}
               {/* The landing page stays reachable while signed in. It used to
@@ -158,6 +198,7 @@ export default function App() {
                 <Route path="categories" element={<Categories />} />
                 <Route path="c/:categoryId" element={<CategoryProducts />} />
                 <Route path="p/:productId" element={<ProductDetail />} />
+                <Route path="seller/:sellerId" element={<SellerShop />} />
                 <Route path="cart" element={<Cart />} />
                 <Route path="checkout" element={<Checkout />} />
                 <Route path="orders" element={<CustomerOrders />} />

@@ -38,7 +38,7 @@ export function Today() {
   const bandLabel = (band: string) =>
     (lang === 'mr' ? labels[band]?.mr : labels[band]?.en) ?? band
 
-  const queue = s.pendingPayments + s.stuckOrders
+  const queue = s.pendingPayments + s.pendingProducts + s.stuckOrders
 
   return (
     <>
@@ -57,6 +57,11 @@ export function Today() {
                 n={s.pendingPayments}
                 label={t('today.pendingPayments')}
                 onClick={() => nav('/payments')}
+              />
+              <ActionTile
+                n={s.pendingProducts}
+                label={t('today.pendingProducts')}
+                onClick={() => nav('/products')}
               />
               <ActionTile
                 n={s.stuckOrders}

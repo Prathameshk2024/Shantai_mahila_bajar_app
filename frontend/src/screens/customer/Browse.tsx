@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import type { Category, Product, Seller } from '@shared/types.js'
 import { useI18n, useT } from '../../i18n/I18nProvider.js'
 import { useCart } from '../../store/CartContext.js'
+import { useToast } from '../../store/ToastContext.js'
 import ProductImage from '../../components/ProductImage.js'
 import { Avatar } from '../../components/Avatar.js'
 import { api } from '../../lib/api.js'
@@ -12,7 +13,8 @@ import {
   Rupees, SectionTitle, Stepper, TextInput, useAsync,
 } from '../../components/ui.js'
 import {
-  IconCart, IconCheck, IconProduct, IconSearch, IconStar,
+  IconCart, IconCheck, IconMinus, IconNext, IconPlus, IconProduct, IconSearch,
+  IconStar,
 } from '../../components/icons.js'
 import { PageTour } from '../../components/Walkthrough.js'
 
@@ -36,21 +38,97 @@ function CategoryTileArt({ category }: { category: Category }) {
   )
 }
 
-function ProductCard({ product, onOpen }: { product: Product; onOpen: () => void }) {
+type CardProduct = Product & { seller?: Partial<Seller> }
+
+export function ProductCard({ product, onOpen }: { product: CardProduct; onOpen: () => void }) {
   return (
-    <button className="pcard" onClick={onOpen}>
-      <ProductImage
-        src={product.imageUrl}
-        emoji={product.emoji}
-        categoryId={product.categoryId}
-        className="pcard__img"
-        rounded="0"
-      />
-      <div className="pcard__body">
-        <div className="pcard__name">{product.name}</div>
-        <div className="pcard__price"><Rupees value={product.price} /></div>
+    <div className="pcard">
+      {/* The card opens the product; the control below adds it. Two jobs, two
+          buttons - a tap on ADD that also navigated away would lose her the
+          list she was working down. */}
+      <button className="pcard__open" onClick={onOpen}>
+        <ProductImage
+          src={product.imageUrl}
+          emoji={product.emoji}
+          categoryId={product.categoryId}
+          className="pcard__img"
+          rounded="0"
+        />
+        <div className="pcard__body">
+          <div className="pcard__name">{product.name}</div>
+          <div className="pcard__price"><Rupees value={product.price} /></div>
+        </div>
+      </button>
+
+      <div className="pcard__add">
+        <AddControl product={product} />
       </div>
-    </button>
+    </div>
+  )
+}
+
+/**
+ * ADD, then how many she has.
+ *
+ * A count she can see is the difference between "did that work?" and knowing
+ * it did - the cart badge is at the bottom of the screen and the product she
+ * just tapped is under her thumb. Once there is one in the cart the button
+ * becomes the count, with a minus beside it, so a mis-tap is undone where it
+ * happened rather than two screens away.
+ *
+ * Bounded by the stock the seller entered, because the whole listing is a
+ * promise she has to keep.
+ */
+function AddControl({ product }: { product: CardProduct }) {
+  const t = useT()
+  const { toast } = useToast()
+  const { items, add, setQty, sellerName: cartShop } = useCart()
+
+  const qty = items.find((i) => i.productId === product.id)?.qty ?? 0
+  const outOfStock = !product.madeToOrder && product.stock === 0
+  const max = product.madeToOrder ? 20 : product.stock
+
+  if (outOfStock) {
+    return <span className="pill pill--danger">{t('prod.outOfStock')}</span>
+  }
+
+  if (qty === 0) {
+    return (
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => {
+          // One seller owns the cart. A toast rather than a dialog: she is in
+          // the middle of a list, and the product screen says it in full.
+          if (!add(product, 1, product.seller?.shopName)) {
+            toast(t('cus.cartLocked', { shop: cartShop ?? '' }), 'warn')
+          }
+        }}
+      >
+        {t('cus.addToCart')} +
+      </Button>
+    )
+  }
+
+  return (
+    <div className="qtybar">
+      <button
+        className="qtybar__btn"
+        aria-label={qty > 1 ? t('cart.decrease') : t('cart.removeItem')}
+        onClick={() => setQty(product.id, qty - 1)}
+      >
+        <IconMinus aria-hidden="true" />
+      </button>
+      <span className="qtybar__n num" aria-live="polite">{qty}</span>
+      <button
+        className="qtybar__btn"
+        aria-label={t('cart.increase')}
+        disabled={qty >= max}
+        onClick={() => setQty(product.id, qty + 1)}
+      >
+        <IconPlus aria-hidden="true" />
+      </button>
+    </div>
   )
 }
 
@@ -183,10 +261,20 @@ export function ProductDetail() {
   const { productId } = useParams()
   const t = useT()
   const nav = useNavigate()
-  const { add, has } = useCart()
+  const { add, has, canAdd, sellerName: cartShop } = useCart()
   const [qty, setQty] = useState(1)
 
   const [data, loading] = useAsync(() => api.product(productId!), [productId])
+
+  /**
+   * The rest of this shop's window. Fetched by seller rather than filtered
+   * out of the whole catalogue, so three products cost three products.
+   */
+  const sellerId = data?.product.sellerId
+  const [more] = useAsync(
+    () => (sellerId ? api.catalog({ sellerId }) : Promise.resolve({ products: [] })),
+    [sellerId],
+  )
 
   if (loading) {
     return <><AppBar title="" onBack={() => nav(-1)} /><div className="screen"><Loading /></div></>
@@ -197,6 +285,21 @@ export function ProductDetail() {
 
   const { product, seller } = data
   const outOfStock = !product.madeToOrder && product.stock === 0
+
+  // Newest first, this one excluded, three of them. Three is a glance; a
+  // second grid of everything she sells belongs on the shop page, not under
+  // the buy button.
+  const alsoFromShop = (more?.products ?? [])
+    .filter((p) => p.id !== product.id)
+    .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
+    .slice(0, 3)
+
+  /**
+   * ONE SELLER AT A TIME. The cart belongs to whoever she added from first,
+   * so this product is refused while another shop holds it - with the name of
+   * that shop and a way to go and look, never by emptying it for her.
+   */
+  const blockedBy = canAdd(product.sellerId) ? null : (cartShop ?? '')
 
   return (
     <>
@@ -263,22 +366,115 @@ export function ProductDetail() {
             {seller.freeDeliveryAbove > 0 && <> · ₹{seller.freeDeliveryAbove}+ {t('cart.free')}</>}
           </Notice>
         )}
+
+        {/* Three, then the door to the rest. One shop owns the cart now, so
+            what else that shop sells is the most useful thing on this screen:
+            the next item she buys can only come from here. */}
+        {alsoFromShop.length > 0 && (
+          <div>
+            <SectionTitle>{t('cus.moreFromShop')}</SectionTitle>
+            <div className="pgrid">
+              {alsoFromShop.map((p) => (
+                <ProductCard key={p.id} product={p} onOpen={() => nav(`/shop/p/${p.id}`)} />
+              ))}
+            </div>
+            <Button
+              variant="ghost"
+              onClick={() => nav(`/shop/seller/${product.sellerId}`)}
+              style={{ marginTop: 'var(--s3)' }}
+            >
+              {t('cus.seeAllFromShop')} <IconNext aria-hidden="true" />
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="actionbar">
-        {!outOfStock && (
-          <div className="row-between">
-            <span style={{ fontWeight: 600 }}>{t('prod.stock')}</span>
-            <Stepper value={qty} onChange={setQty} max={product.madeToOrder ? 20 : product.stock} />
-          </div>
+        {blockedBy !== null ? (
+          <>
+            {/* Her cart is not touched. She is told whose it is and sent to
+                look at it - emptying it for her would lose the only record of
+                what she had chosen. */}
+            <Notice tone="warn">{t('cus.cartLocked', { shop: blockedBy })}</Notice>
+            <Button onClick={() => nav('/shop/cart')}>
+              <IconCart aria-hidden="true" /> {t('cus.openCart')}
+            </Button>
+          </>
+        ) : (
+          <>
+            {!outOfStock && (
+              <div className="row-between">
+                <span style={{ fontWeight: 600 }}>{t('prod.stock')}</span>
+                <Stepper value={qty} onChange={setQty} max={product.madeToOrder ? 20 : product.stock} />
+              </div>
+            )}
+            <Button
+              disabled={outOfStock}
+              onClick={() => {
+                if (add(product, qty, seller?.shopName)) nav('/shop/cart')
+              }}
+            >
+              {outOfStock ? t('prod.outOfStock') : <><IconCart aria-hidden="true" /> {t('cus.addToCart')}</>}
+              {has(product.id) && <IconCheck aria-hidden="true" />}
+            </Button>
+          </>
         )}
-        <Button
-          disabled={outOfStock}
-          onClick={() => { add(product, qty); nav('/shop/cart') }}
-        >
-          {outOfStock ? t('prod.outOfStock') : <><IconCart aria-hidden="true" /> {t('cus.addToCart')}</>}
-          {has(product.id) && <IconCheck aria-hidden="true" />}
-        </Button>
+      </div>
+    </>
+  )
+}
+
+/**
+ * ONE SHOP'S WINDOW.
+ *
+ * Reached from "see all" under a product, and the natural landing place for
+ * her QR poster the day that comes back. It matters more than it used to: the
+ * cart holds one seller at a time, so once a buyer has added anything, this
+ * page is the whole of what she can still buy today.
+ */
+export function SellerShop() {
+  const { sellerId } = useParams()
+  const t = useT()
+  const nav = useNavigate()
+
+  const [data, loading] = useAsync(() => api.catalog({ sellerId }), [sellerId])
+  const products = data?.products ?? []
+  const seller = products[0]?.seller
+
+  if (loading) {
+    return <><AppBar title="" onBack={() => nav(-1)} /><div className="screen"><Loading /></div></>
+  }
+
+  return (
+    <>
+      <AppBar title={seller?.shopName ?? t('cus.shop')} onBack={() => nav(-1)} />
+      <div className="screen stack">
+        {seller && <SellerCard seller={seller} />}
+
+        {seller && (
+          <Notice tone="info">
+            {t('cus.deliveryFee')}: <Rupees value={seller.deliveryFee ?? 0} />
+            {(seller.freeDeliveryAbove ?? 0) > 0 && (
+              <> · ₹{seller.freeDeliveryAbove}+ {t('cart.free')}</>
+            )}
+            {(seller.minOrder ?? 0) > 0 && <> · {t('cart.minOrder')} ₹{seller.minOrder}</>}
+          </Notice>
+        )}
+
+        {/* An empty shop is not an error. A seller between batches has taken
+            her listings down, and saying so beats an error icon. */}
+        {products.length === 0 ? (
+          <Card><EmptyState icon={IconProduct} title={t('prod.noProducts')} /></Card>
+        ) : (
+          <>
+            <SectionTitle>{t('cus.allFromShop')} ({products.length})</SectionTitle>
+            <div className="pgrid">
+              {products.map((p) => (
+                <ProductCard key={p.id} product={p} onOpen={() => nav(`/shop/p/${p.id}`)} />
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </>
   )

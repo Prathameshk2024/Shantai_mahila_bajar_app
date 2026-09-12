@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useT } from '../i18n/I18nProvider.js'
 import { useToast } from '../store/ToastContext.js'
 import { IconPayments } from '../components/icons.js'
@@ -11,6 +11,36 @@ import {
 } from '../components/ui.js'
 
 type Tab = 'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'
+
+/** How often the waiting times are redrawn on a console left open. */
+const TICK_MS = 30 * 60 * 1000
+
+const WAIT_UNIT_KEY = {
+  m: 'c.minutesShort',
+  h: 'c.hoursShort',
+  d: 'c.daysShort',
+} as const
+
+/**
+ * A clock the waiting times are measured against, re-read every half hour.
+ *
+ * `waited()` is computed during a render, so on a console that sits open on a
+ * desk all day - which is exactly how this one is used - every queue age was
+ * frozen at whenever the page was last loaded. A row saying "Waiting 2 h" at
+ * six in the evening, when she had in fact been waiting since morning, is
+ * worse than no number: it is a number that argues against acting.
+ *
+ * Half-hourly rather than by the second, because nothing here turns on a
+ * minute and a timer that wakes 1,800 times as often is a laptop fan.
+ */
+function useNow(everyMs = TICK_MS): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), everyMs)
+    return () => clearInterval(id)
+  }, [everyMs])
+  return now
+}
 
 /**
  * Approving a ₹50 payment is the single most consequential click in this
@@ -26,6 +56,7 @@ export function Payments() {
   const t = useT()
   const [tab, setTab] = useState<Tab>('PENDING')
   const [data, loading, error, reload] = useAsync(() => api.payments(tab), [tab])
+  const now = useNow()
 
   const rows = data?.payments ?? []
 
@@ -55,7 +86,7 @@ export function Payments() {
         ) : (
           <div className="stack-sm">
             {rows.map((p) => (
-              <PaymentCard key={p.id} payment={p} onDone={reload} />
+              <PaymentCard key={p.id} payment={p} now={now} onDone={reload} />
             ))}
           </div>
         )}
@@ -64,7 +95,9 @@ export function Payments() {
   )
 }
 
-function PaymentCard({ payment, onDone }: { payment: PaymentRow; onDone: () => void }) {
+function PaymentCard(
+  { payment, now, onDone }: { payment: PaymentRow; now: number; onDone: () => void },
+) {
   const t = useT()
   const { toast } = useToast()
   const errorText = useErrorText()
@@ -75,7 +108,7 @@ function PaymentCard({ payment, onDone }: { payment: PaymentRow; onDone: () => v
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
-  const w = waited(payment.submittedAt)
+  const w = waited(payment.submittedAt, now)
   const pending = payment.status === 'PENDING'
 
   async function run(action: () => Promise<unknown>, done: string) {
@@ -114,7 +147,7 @@ function PaymentCard({ payment, onDone }: { payment: PaymentRow; onDone: () => v
             <StatusPill status={payment.status} />
             {pending && (
               <Pill tone={w.unit === 'd' ? 'danger' : 'warn'}>
-                {t('pay.waiting')} {w.value}{t(w.unit === 'd' ? 'c.daysShort' : 'c.hoursShort')}
+                {t('pay.waiting')} {w.value}{t(WAIT_UNIT_KEY[w.unit])}
               </Pill>
             )}
             {/* The ordinary case: submit tapped twice on a slow connection.
@@ -131,6 +164,17 @@ function PaymentCard({ payment, onDone }: { payment: PaymentRow; onDone: () => v
             <div className="small dim">
               {t('pay.payerUpi')}{' '}
               <CopyValue value={payment.payerUpi} label={t('c.copy')} copiedText={t('c.upiCopied')} />
+            </div>
+          )}
+          {/* The screenshot is what settles a disputed ₹50: the UTR is typed
+              by hand and can be mistyped or invented, the bank's own receipt
+              cannot. Opened in a new tab rather than shown inline - it is a
+              full-size phone screenshot, and this is a queue. */}
+          {payment.screenshotUrl && (
+            <div className="small">
+              <a href={payment.screenshotUrl} target="_blank" rel="noreferrer">
+                {t('pay.screenshot')}
+              </a>
             </div>
           )}
           <div className="small dim-2">

@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import type { DigitalProfile, Seller, SubscriptionPayment } from '@shared/types.js'
 import {
-  defaultAbout, isValidPhone, isValidPincode, isValidUpi,
+  defaultAbout, isValidPhone, isValidPincode,
   normalizePhone, PLAN, samePhone, slotInfo, validateSellerProfile,
 } from '@shared/seller.js'
+import { normalizeUtr, upiProblem, utrProblem } from '@shared/payment.js'
 import { makeShopSlug, makeWomenBizId, villageCode } from '@shared/womenbiz.js'
 import { computeReadiness, readinessBand, recomputeForSeller } from '@shared/readiness.js'
 import { getDb, newId, save } from '../db/store.js'
@@ -112,7 +113,8 @@ sellersRouter.post('/register', (req, res) => {
   if (!b.village?.trim()) fields.village = 'गाव आवश्यक आहे'
   if (!b.shopName?.trim()) fields.shopName = 'दुकानाचे नाव आवश्यक आहे'
   if (!isValidPincode(b.pincode)) fields.pincode = '6 अंकी पिनकोड टाका'
-  if (!isValidUpi(b.upiId)) fields.upiId = 'UPI आयडी बरोबर नाही'
+  const upiFault = upiProblem(b.upiId)
+  if (upiFault) fields.upiId = upiFault
   if (b.age != null && (b.age < 18 || b.age > 90)) fields.age = 'वय 18 ते 90 दरम्यान असावे'
 
   if (Object.keys(fields).length) {
@@ -286,8 +288,9 @@ sellersRouter.patch('/me', requireRole('seller'), (req, res) => {
 
   // UPI changes re-enter verification: otherwise it is an account-takeover route.
   if (typeof req.body.upiId === 'string' && req.body.upiId !== current.upiId) {
-    if (!isValidUpi(req.body.upiId)) {
-      res.status(400).json({ error: 'Bad UPI', fields: { upiId: 'UPI आयडी बरोबर नाही' } })
+    const fault = upiProblem(req.body.upiId)
+    if (fault) {
+      res.status(400).json({ error: 'Bad UPI', messageMr: fault, fields: { upiId: fault } })
       return
     }
     patch.upiId = req.body.upiId
@@ -417,12 +420,10 @@ sellersRouter.post('/me/subscription/payment', requireRole('seller'), (req, res)
     return
   }
 
-  const utr = String(req.body?.utr ?? '').replace(/\s/g, '')
-  if (utr.length < 6) {
-    res.status(400).json({
-      error: 'UTR required',
-      fields: { utr: 'पेमेंट झाल्यावर मिळणारा क्रमांक टाका' },
-    })
+  const utr = normalizeUtr(req.body?.utr)
+  const utrFault = utrProblem(utr)
+  if (utrFault) {
+    res.status(400).json({ error: 'Invalid UTR', messageMr: utrFault, fields: { utr: utrFault } })
     return
   }
 

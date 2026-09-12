@@ -76,7 +76,7 @@ export function Shell() {
     { to: '/', end: true, icon: IconHome, label: t('nav.home') },
     { to: '/today', icon: IconToday, label: t('nav.today') },
     { to: '/payments', icon: IconPayments, label: t('nav.payments'), badge: s?.pendingPayments },
-    { to: '/products', icon: IconProducts, label: t('nav.products') },
+    { to: '/products', icon: IconProducts, label: t('nav.products'), badge: s?.pendingProducts },
     { to: '/sellers', icon: IconSellers, label: t('nav.sellers') },
     { to: '/orders', icon: IconOrders, label: t('nav.orders'), badge: s?.stuckOrders },
     { to: '/impact', icon: IconImpact, label: t('nav.impact') },

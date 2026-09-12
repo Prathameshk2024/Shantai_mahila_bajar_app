@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { buildUpiLink, isValidUpi } from '@shared/seller.js'
+import { upiProblem } from '@shared/payment.js'
 import { useT } from '../../i18n/I18nProvider.js'
 import { api, ApiError } from '../../lib/api.js'
 import {
@@ -58,8 +59,9 @@ export default function PaymentQr() {
     : ''
 
   async function saveUpi() {
-    if (!isValidUpi(upi)) {
-      setErr(t('reg.upiPlaceholder'))
+    const fault = upiProblem(upi)
+    if (fault) {
+      setErr(fault)
       return
     }
     setBusy(true)

@@ -115,6 +115,7 @@ adminRouter.get('/stats', (_req, res) => {
       (s) => Date.now() - new Date(s.createdAt).getTime() < 7 * 86_400_000,
     ).length,
     pendingPayments: db.payments.filter((p) => p.status === 'PENDING').length,
+    pendingProducts: db.products.filter((p) => p.status === 'PENDING').length,
     stuckOrders: stuck.length,
     openDisputes: 0,
     womenEarnedTotal: earnedTotal,
@@ -133,7 +134,7 @@ adminRouter.get('/stats', (_req, res) => {
       { mr: '50 रुपये भरले', en: 'Paid ₹50', v: db.payments.length },
       { mr: 'मंजूर झाले', en: 'Approved', v: db.sellers.filter((s) => s.status === 'ACTIVE').length },
       { mr: 'पहिले उत्पादन', en: 'First product', v: new Set(db.products.map((p) => p.sellerId)).size },
-      { mr: 'पहिली ऑर्डर', en: 'First order', v: sellersWithEarnings.size },
+      { mr: 'पहिले ऑर्डर', en: 'First order', v: sellersWithEarnings.size },
     ],
     earningBands: ['₹0', '< ₹1,000', '₹1,000-5,000', '> ₹5,000'].map((label) => ({
       label,
@@ -155,13 +156,10 @@ adminRouter.get('/stats', (_req, res) => {
 adminRouter.get('/payments', (req, res) => {
   const db = getDb()
   const status = (req.query.status as string) ?? 'PENDING'
-  const list = db.payments
-    .filter((p) => (status === 'ALL' ? true : p.status === status))
-    .map((p) => ({
-      ...p,
-      // Waiting time is an SLA on somebody's livelihood, so surface it.
-      waitingHours: Math.round((Date.now() - new Date(p.submittedAt).getTime()) / 3_600_000),
-    }))
+  // The waiting time is an SLA on somebody's livelihood, and the console draws
+  // it from `submittedAt` itself - a number computed here is frozen at the
+  // moment of the response, and this console sits open on a desk for hours.
+  const list = db.payments.filter((p) => (status === 'ALL' ? true : p.status === status))
   res.json({ payments: list })
 })
 
@@ -193,8 +191,10 @@ adminRouter.post('/payments/:id/approve', (req, res) => {
   }
   save()
 
-  // TODO: send the SMS here. The waiting screen promises her one, and that
-  // promise is what stops her calling support.
+  // No SMS goes out on approval, and the waiting screen no longer promises
+  // one. `notifySeller` above is the whole notification: she sees it in her
+  // own app the next time she opens it. Adding an SMS here means adding it to
+  // that screen's copy in the same change, or the promise outlives the send.
   res.json({ payment, seller })
 })
 

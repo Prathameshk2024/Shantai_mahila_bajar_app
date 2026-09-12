@@ -245,10 +245,10 @@ export const api = {
       payments: SubscriptionPayment[]
     }>('/sellers/me/subscription'),
 
-  submitPayment: (utr: string, payerUpi?: string) =>
+  submitPayment: (utr: string, payerUpi?: string, screenshotUrl?: string) =>
     post<{ payment: SubscriptionPayment; status: Seller['status'] }>(
       '/sellers/me/subscription/payment',
-      { utr, payerUpi },
+      { utr, payerUpi, screenshotUrl },
     ),
 
   /* ---------------- products ---------------- */
@@ -267,7 +267,7 @@ export const api = {
 
   categories: () => get<{ categories: Category[] }>('/catalog/categories'),
 
-  catalog: (params: { categoryId?: string; q?: string; pincode?: string } = {}) => {
+  catalog: (params: { categoryId?: string; q?: string; pincode?: string; sellerId?: string } = {}) => {
     const qs = new URLSearchParams()
     for (const [k, v] of Object.entries(params)) if (v) qs.set(k, v)
     const s = qs.toString()

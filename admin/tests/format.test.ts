@@ -72,7 +72,25 @@ test('past two days it switches to days, so a bad delay reads as one', () => {
 
 test('a future timestamp does not produce a negative wait', () => {
   const now = new Date('2026-09-04T00:00:00.000Z').getTime()
-  assert.deepEqual(waited('2026-09-05T00:00:00.000Z', now), { value: 0, unit: 'h' })
+  assert.deepEqual(waited('2026-09-05T00:00:00.000Z', now), { value: 0, unit: 'm' })
+})
+
+/**
+ * Under the hour it counts minutes.
+ *
+ * Flooring a twenty-minute wait to "0 h" told an admin that nothing had
+ * happened yet, on the one screen whose job is to say that a woman has paid
+ * ₹50 and is waiting to be let in.
+ */
+test('a wait under an hour is counted in minutes, not floored to zero', () => {
+  const now = new Date('2026-09-04T00:20:00.000Z').getTime()
+  assert.deepEqual(waited('2026-09-04T00:00:00.000Z', now), { value: 20, unit: 'm' })
+})
+
+test('the hour is the boundary between minutes and hours', () => {
+  const at = '2026-09-04T00:00:00.000Z'
+  assert.deepEqual(waited(at, new Date('2026-09-04T00:59:00.000Z').getTime()), { value: 59, unit: 'm' })
+  assert.deepEqual(waited(at, new Date('2026-09-04T01:00:00.000Z').getTime()), { value: 1, unit: 'h' })
 })
 
 /* ---------------- stuck orders ---------------- */

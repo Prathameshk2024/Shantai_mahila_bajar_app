@@ -278,7 +278,9 @@ export function VoiceInput({
     />
   )
 
-  if (!voice.supported) return field
+  // A locked field keeps no microphone. Dictating into a box that cannot
+  // accept the words is worse than having no mic at all.
+  if (!voice.supported || rest.disabled) return field
 
   const problem =
     voice.error === 'denied'
@@ -542,7 +544,18 @@ export function useAsync<T>(
 
   useEffect(() => {
     let alive = true
-    setState((s) => ({ ...s, loading: true }))
+    /**
+     * Loading means "there is nothing to show yet", not "something is in
+     * flight".
+     *
+     * Screens render a spinner INSTEAD of their content while this is true, so
+     * flipping it on a refetch replaced a tall list with one short spinner -
+     * and the browser, with nowhere left to scroll, clamped her to the top.
+     * From the outside that is "the page jumped up when I did something at the
+     * bottom". Keeping the old data on screen until the new data lands has no
+     * such effect, and is what she expects anyway.
+     */
+    setState((s) => ({ ...s, loading: s.data === null }))
     fn()
       .then((data) => alive && setState({ loading: false, data }))
       .catch(() => alive && setState({ loading: false, data: null }))
@@ -568,12 +581,18 @@ export function CopyValue({ value }: { value: string }) {
   const { toast } = useToast()
   if (!value) return null
   return (
-    <div className="row" style={{ gap: 'var(--s2)' }}>
+    <div className="copyrow">
       <strong className="num" style={{ wordBreak: 'break-all' }}>{value}</strong>
+      {/* The icon alone. A button wearing the word "Copy" was three times the
+          width of the ID it belonged to, which read as the important thing on
+          the screen - and the important thing is the address the money goes
+          to. The name lives in aria-label, where it costs no width. */}
       <Button
+        className="copybtn"
         variant="quiet"
         size="sm"
         aria-label={t('common.copy')}
+        title={t('common.copy')}
         onClick={() => {
           navigator.clipboard
             .writeText(value)
@@ -581,7 +600,7 @@ export function CopyValue({ value }: { value: string }) {
             .catch(() => toast(t('err.copyFailed')))
         }}
       >
-        <IconCopy aria-hidden="true" /> {t('common.copy')}
+        <IconCopy aria-hidden="true" />
       </Button>
     </div>
   )

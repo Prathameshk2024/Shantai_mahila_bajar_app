@@ -61,11 +61,13 @@ export default function MyProducts() {
 
         {products.length === 0 ? (
           <Card>
+            {/* No action here: the same button sits in the bar below, on every
+                branch of this screen. Two of it, one above the other, made the
+                lower one look like a different thing. */}
             <EmptyState
               icon={IconProduct}
               title={t('prod.noProducts')}
               body={t('prod.noProductsSub')}
-              action={<Button onClick={() => nav('/seller/upload')}>{t('prod.add')}</Button>}
             />
           </Card>
         ) : (

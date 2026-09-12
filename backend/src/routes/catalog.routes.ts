@@ -1,9 +1,31 @@
 import { Router } from 'express'
+import type { Product, Seller } from '@shared/types.js'
 import { getDb } from '../db/store.js'
 import { CATEGORIES } from '../db/seed.js'
 
 /** Public, unauthenticated. This is what a shopper and a scanned QR both hit. */
 export const catalogRouter: Router = Router()
+
+/**
+ * WHAT THE PUBLIC MAY SEE, IN ONE PLACE.
+ *
+ * The list and the by-id lookup each decided this for themselves, and a
+ * listing hidden from one but readable from the other is not hidden - it is
+ * findable by anyone who tries the id. A draft, a rejected product and a
+ * paused one are all things a seller has chosen not to show, and a blocked or
+ * closed shop is a decision about the whole shop.
+ *
+ * Both conditions matter. A LIVE product under a BLOCKED seller is still off
+ * the shelf, and a shop that has closed for the afternoon takes its whole
+ * window with it.
+ */
+export function publiclyVisible(
+  product: Pick<Product, 'status'> | undefined,
+  seller: Pick<Seller, 'status' | 'isOpen'> | undefined,
+): boolean {
+  if (!product || !seller) return false
+  return product.status === 'LIVE' && seller.status === 'ACTIVE' && !!seller.isOpen
+}
 
 catalogRouter.get('/categories', (_req, res) => {
   res.json({ categories: CATEGORIES })
@@ -11,15 +33,18 @@ catalogRouter.get('/categories', (_req, res) => {
 
 catalogRouter.get('/products', (req, res) => {
   const db = getDb()
-  const { categoryId, q, pincode } = req.query as Record<string, string | undefined>
+  const { categoryId, q, pincode, sellerId } = req.query as Record<string, string | undefined>
 
-  const openSellers = new Set(
-    db.sellers.filter((s) => s.isOpen && s.status === 'ACTIVE').map((s) => s.id),
-  )
+  const sellerById = new Map(db.sellers.map((s) => [s.id, s]))
 
-  let list = db.products.filter((p) => p.status === 'LIVE' && openSellers.has(p.sellerId))
+  let list = db.products.filter((p) => publiclyVisible(p, sellerById.get(p.sellerId)))
 
   if (categoryId) list = list.filter((p) => p.categoryId === categoryId)
+
+  // One shop's window: the "more from this shop" strip and the shop page.
+  // Filtered here rather than in the browser because a phone on rural 4G
+  // should not download the whole catalogue to show three products.
+  if (sellerId) list = list.filter((p) => p.sellerId === sellerId)
 
   if (pincode) {
     const serviceable = new Set(
@@ -78,10 +103,9 @@ catalogRouter.get('/products/:id', (req, res) => {
   const product = db.products.find((p) => p.id === req.params.id)
   const seller = product && db.sellers.find((s) => s.id === product.sellerId)
 
-  // A listing is public only when it is LIVE and its seller is approved and
-  // open. Without both checks a pending or rejected product - and the seller
-  // behind it - was readable by anyone holding the id.
-  if (!product || product.status !== 'LIVE' || !seller || seller.status !== 'ACTIVE' || !seller.isOpen) {
+  // 404, not 403, and the same 404 whether the id is unknown or merely not
+  // public: telling the difference confirms that a hidden listing exists.
+  if (!publiclyVisible(product, seller)) {
     res.status(404).json({ error: 'Product not found', messageMr: 'हे उत्पादन सापडले नाही' })
     return
   }

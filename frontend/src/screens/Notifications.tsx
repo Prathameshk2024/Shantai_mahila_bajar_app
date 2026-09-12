@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { useT } from '../i18n/I18nProvider.js'
 import { useAuth } from '../store/AuthContext.js'
 import { api } from '../lib/api.js'
-import { adminFeed, buildFeed, lastSeen, markSeen, mergeFeeds } from '../lib/notifications.js'
+import { adminFeed, buildFeed, markSeen, mergeFeeds } from '../lib/notifications.js'
+import { STATUS_STYLE, statusLabelKey } from '@shared/orderFlow.js'
 import {
-  AppBar, Card, EmptyState, Loading, Rupees, useAsync,
+  AppBar, Card, EmptyState, Loading, Pill, Rupees, useAsync,
 } from '../components/ui.js'
 import { IconBell, IconChevron } from '../components/icons.js'
 
@@ -33,10 +34,10 @@ export default function Notifications() {
     [session?.role],
   )
 
-  const seenBefore = session ? lastSeen(session.userId) : ''
-
-  // Marked after the render that showed them, so the "new" marks below are
-  // still drawn on this visit and gone on the next.
+  // No per-row "new" mark: the row already says where the order is, and a
+  // second badge beside a status tag is two things competing to be the thing
+  // she reads. The bell still counts what she has not seen - that is what a
+  // badge is for, and this screen is what clears it.
   useEffect(() => {
     if (session && !loading) markSeen(session.userId)
   }, [session, loading])
@@ -68,8 +69,18 @@ export default function Notifications() {
             >
               <div className="tile__body">
                 <div className="tile__title">
-                  {t(n.labelKey, n.vars)}
-                  {n.at > seenBefore && <span className="newdot">{t('notif.new')}</span>}
+                  {/* An order is named after what is in it and wears its state
+                      as a tag; an admin decision has no product, so it still
+                      prints its own sentence. */}
+                  {n.title ?? t(n.labelKey, n.vars)}
+                  {n.status && (
+                    <Pill
+                      tone={STATUS_STYLE[n.status].tone}
+                      icon={STATUS_STYLE[n.status].icon}
+                    >
+                      {t(statusLabelKey(n.status))}
+                    </Pill>
+                  )}
                 </div>
                 <div className="tile__meta">
                   {[n.who, n.orderId, when(n.at)].filter(Boolean).join(' · ')}

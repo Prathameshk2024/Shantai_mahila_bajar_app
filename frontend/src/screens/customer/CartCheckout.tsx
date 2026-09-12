@@ -5,6 +5,7 @@ import {
   STATUS_STYLE, awaitingCustomerPayment, statusLabelKey,
 } from '@shared/orderFlow.js'
 import { buildUpiLink, isMaharashtraPincode } from '@shared/seller.js'
+import { isValidUtr, normalizeUtr, utrProblem } from '@shared/payment.js'
 import { useT } from '../../i18n/I18nProvider.js'
 import { useAuth } from '../../store/AuthContext.js'
 import { useCart } from '../../store/CartContext.js'
@@ -19,6 +20,7 @@ import {
   Notice, Pill, Rupees, SectionTitle, Stepper, TextInput, VoiceInput, useAsync,
 } from '../../components/ui.js'
 import { Timeline } from '../seller/Orders.js'
+import { ProductCard } from './Browse.js'
 import {
   IconAddressHome, IconAddressOther, IconCall, IconCart, IconCash, IconChevron,
   IconNext, IconOrders, IconPlus, IconProfile, IconUpi, IconWhatsapp,
@@ -32,7 +34,7 @@ import { PageTour, TourMenu } from '../../components/Walkthrough.js'
 export function Cart() {
   const t = useT()
   const nav = useNavigate()
-  const { setQty, count, groupBySeller } = useCart()
+  const { items: cartItems, setQty, count, groupBySeller, sellerId: cartSellerId } = useCart()
 
   // Sellers come from the catalog, which already carries a seller card per item.
   const [data, loading] = useAsync(() => api.catalog(), [])
@@ -65,15 +67,47 @@ export function Cart() {
     )
   }
 
+  /**
+   * How many of this she may still add.
+   *
+   * Read from the catalogue rather than from the cart line, because the cart
+   * is written to localStorage and a jar that was in stock on Tuesday may not
+   * be on Friday. Made-to-order has no shelf to count, so it gets the same
+   * ceiling the product screen uses; a product that has vanished from the
+   * catalogue keeps whatever is already in the basket and goes no higher.
+   */
+  const maxQty = (productId: string): number => {
+    const p = (data?.products ?? []).find((x) => x.id === productId)
+    if (!p) return cartItems.find((i) => i.productId === productId)?.qty ?? 1
+    return p.madeToOrder ? 20 : p.stock
+  }
+
   const sellers = dedupeSellers(data?.products ?? [])
   const groups = groupBySeller(sellers)
   const grand = groups.reduce((n, g) => n + g.total, 0)
+
+  /**
+   * The rest of this shop's window, on the cart itself.
+   *
+   * The cart is locked to one seller, so this is the entire set of things she
+   * can still add to this order - and the catalogue is already loaded for the
+   * seller cards above, so it costs nothing to ask. What is already in the
+   * cart is left out: it is listed in full a few lines up, with its own
+   * controls.
+   */
+  const inCart = new Set(cartItems.map((i) => i.productId))
+  const alsoFromShop = (data?.products ?? []).filter(
+    (p) => p.sellerId === cartSellerId && !inCart.has(p.id),
+  )
   const blocked = groups.some((g) => g.belowMinimum)
 
   return (
     <>
       <AppBar brand title={t('nav.cart')} sub={`${count} ${t('ord.items')}`} />
       <div className="screen stack" data-wt="cart-list">
+        {/* One seller owns the cart now, so this fires only for a cart saved
+            in localStorage before that rule existed. It stays because the
+            alternative is dropping her items to make the screen tidy. */}
         {groups.length > 1 && <Notice tone="info">{t('cus.perSellerNote')}</Notice>}
 
         {groups.map((g) => (
@@ -86,6 +120,16 @@ export function Cart() {
               </div>
             </div>
 
+            {/*
+              Both directions, on the line itself.
+
+              It was down-only, on the grounds that quantity belongs on the
+              product screen where the stock is - which left a buyer who
+              wanted a third jar tapping back into the catalogue to find the
+              product again. The stock is the real constraint, so it comes to
+              the cart instead: `max` is read from the catalogue this screen
+              has already loaded, and the + stops where the shelf does.
+            */}
             <div className="stack-sm">
               {g.items.map((i) => (
                 <div key={i.productId} className="row-between">
@@ -93,10 +137,23 @@ export function Cart() {
                     <span aria-hidden="true" style={{ fontSize: '1.5rem' }}>{i.emoji}</span>
                     <div>
                       <div style={{ fontWeight: 600 }}>{i.name}</div>
-                      <div className="small dim"><Rupees value={i.price} /> / {t(`unit.${i.unit}`)}</div>
+                      <div className="small dim">
+                        <span className="num">{i.qty}</span> {t(`unit.${i.unit}`)}
+                        {' × '}<Rupees value={i.price} />
+                      </div>
                     </div>
                   </div>
-                  <Stepper value={i.qty} onChange={(v) => setQty(i.productId, v)} min={0} />
+                  <div className="row" style={{ gap: 'var(--s3)' }}>
+                    <strong className="num"><Rupees value={i.price * i.qty} /></strong>
+                    {/* min 0: the last tap on a line of one takes it out,
+                        which is how she empties a cart to reach another shop. */}
+                    <Stepper
+                      value={i.qty}
+                      onChange={(v) => setQty(i.productId, v)}
+                      min={0}
+                      max={maxQty(i.productId)}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
@@ -127,6 +184,20 @@ export function Cart() {
             )}
           </Card>
         ))}
+
+        {/* Adding one more thing should not mean going back and finding the
+            shop again. Same card as everywhere else, so ADD, the count and
+            the stock ceiling behave exactly as they do on Explore. */}
+        {alsoFromShop.length > 0 && (
+          <div>
+            <SectionTitle>{t('cus.moreFromShop')}</SectionTitle>
+            <div className="pgrid">
+              {alsoFromShop.map((p) => (
+                <ProductCard key={p.id} product={p} onOpen={() => nav(`/shop/p/${p.id}`)} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="actionbar" data-wt="cart-total">
@@ -444,14 +515,17 @@ export function TrackOrder() {
   const seller = data.seller
 
   async function pay() {
-    if (utr.trim().length < 6) {
-      setPayErr(t('cus.enterUtr'))
+    // The same check the server runs, so she is told what is wrong with the
+    // number while it is still on screen rather than after a round trip.
+    const problem = utrProblem(utr)
+    if (problem) {
+      setPayErr(problem)
       return
     }
     setPaying(true)
     setPayErr('')
     try {
-      await api.payOrder(order.id, utr.trim())
+      await api.payOrder(order.id, normalizeUtr(utr))
       setData(await api.order(order.id))
       toast(t('ok.paymentSubmitted'))
     } catch (e) {
@@ -509,6 +583,14 @@ export function TrackOrder() {
           <Card>
             <SectionTitle>{t('cus.payNowTitle')}</SectionTitle>
             <div className="stack-sm">
+              {/* The QR carries the amount, and she cannot read a QR. Paying
+                  the wrong number into a UPI app is the one mistake nobody on
+                  either side can undo, so the figure is on the screen, in the
+                  size of the thing she is being asked to do. */}
+              <div className="center">
+                <div className="small dim">{t('cus.amountToPay')}</div>
+                <div className="hero-num"><Rupees value={order.total} /></div>
+              </div>
               {/* The customer's own uploaded QR beside the generated one, not instead of
                   it: the printed code is the one they recognises, and only the
                   generated link carries the amount and the order id. */}
@@ -542,7 +624,7 @@ export function TrackOrder() {
                 <Notice tone="warn">{t('qrpay.notSetUp')}</Notice>
               )}
 
-              <Field label={t('cus.enterUtr')} error={payErr} required htmlFor="orderUtr">
+              <Field label={t('cus.enterUtr')} hint={t('pay.utrHint')} error={payErr} required htmlFor="orderUtr">
                 <TextInput
                   id="orderUtr"
                   inputMode="numeric"
@@ -552,7 +634,10 @@ export function TrackOrder() {
                   placeholder="512309887711"
                 />
               </Field>
-              <Button onClick={() => void pay()} disabled={paying}>
+              {/* A live button under a number that cannot be a UTR reads as
+                  "this is fine, press me". It is the last thing standing
+                  between her and an order nobody can match to a payment. */}
+              <Button onClick={() => void pay()} disabled={paying || !isValidUtr(utr)}>
                 {paying ? t('common.loading') : t('cus.paidSubmit')}
               </Button>
             </div>

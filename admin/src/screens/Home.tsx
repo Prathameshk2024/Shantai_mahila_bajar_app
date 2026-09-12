@@ -28,11 +28,11 @@ export function Home() {
   const [data, loading, error] = useAsync(() => api.stats(), [])
 
   const s = data?.stats
-  const queue = s ? s.pendingPayments + s.stuckOrders : 0
+  const queue = s ? s.pendingPayments + s.pendingProducts + s.stuckOrders : 0
 
   const sections = [
     { to: '/payments', icon: IconPayments, label: t('nav.payments'), body: t('home.sectionPayments'), badge: s?.pendingPayments },
-    { to: '/products', icon: IconProducts, label: t('nav.products'), body: t('home.sectionProducts') },
+    { to: '/products', icon: IconProducts, label: t('nav.products'), body: t('home.sectionProducts'), badge: s?.pendingProducts },
     { to: '/sellers', icon: IconSellers, label: t('nav.sellers'), body: t('home.sectionSellers') },
     { to: '/orders', icon: IconOrders, label: t('nav.orders'), body: t('home.sectionOrders'), badge: s?.stuckOrders },
     { to: '/impact', icon: IconImpact, label: t('nav.impact'), body: t('home.sectionImpact') },
@@ -63,6 +63,7 @@ export function Home() {
           ) : (
             <div className="tiles">
               <QueueTile n={s!.pendingPayments} label={t('today.pendingPayments')} onClick={() => nav('/payments')} />
+              <QueueTile n={s!.pendingProducts} label={t('today.pendingProducts')} onClick={() => nav('/products')} />
               <QueueTile n={s!.stuckOrders} label={t('today.stuckOrders')} onClick={() => nav('/orders')} />
             </div>
           )}

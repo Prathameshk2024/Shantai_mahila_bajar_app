@@ -498,6 +498,10 @@ export default function UploadProduct() {
           </div>
         ) : (
           <>
+            {/* An admin publishes it, not this button. Saying so here stops
+                her refreshing the shop looking for a listing nobody has
+                approved yet. */}
+            <div className="small dim" style={{ textAlign: 'center' }}>{t('prod.reviewNote')}</div>
             <Button onClick={() => void publish(false)} disabled={busy}>
               {busy ? t('common.loading') : t('prod.publish')}
             </Button>

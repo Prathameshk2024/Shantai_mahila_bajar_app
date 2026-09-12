@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
+import { isValidUtr, normalizeUtr, utrProblem } from '@shared/payment.js'
 import { useT } from '../../i18n/I18nProvider.js'
 import { api, ApiError } from '../../lib/api.js'
 import { useToast } from '../../store/ToastContext.js'
 import QrCode from '../../components/QrCode.js'
+import PhotoPicker from '../../components/PhotoPicker.js'
 import {
   AppBar, Button, Card, EmptyState, Field, Loading, Notice,
   Rupees, TextInput, useAsync,
 } from '../../components/ui.js'
 import {
-  IconCamera, IconCheck, IconMail, IconTraining, IconWaiting, IconWarn,
+  IconCheck, IconTraining, IconWaiting, IconWarn,
   IconWhatsapp,
 } from '../../components/icons.js'
 
@@ -25,6 +27,7 @@ export function Subscription() {
   const [data, loading] = useAsync(() => api.subscription(), [])
 
   const [utr, setUtr] = useState('')
+  const [shot, setShot] = useState<{ url: string; publicId: string } | null>(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -74,13 +77,14 @@ export function Subscription() {
   }
 
   async function submit() {
-    if (utr.trim().length < 6) {
-      setErr(t('pay.utrHint'))
+    const problem = utrProblem(utr)
+    if (problem) {
+      setErr(problem)
       return
     }
     setBusy(true)
     try {
-      await api.submitPayment(utr.trim())
+      await api.submitPayment(normalizeUtr(utr), undefined, shot?.url)
       toast(t('ok.paymentSubmitted'))
       nav('/seller/waiting', { replace: true })
     } catch (e) {
@@ -111,7 +115,11 @@ export function Subscription() {
               <div className="small dim">{t('pay.upiId')}</div>
               <strong className="num">{account.upiId}</strong>
             </div>
-            <a className="btn" href={upiLink}>{t('cus.payNow')} · ₹{plan.price}</a>
+            {/* No "pay now" link. It handed ₹50 to a UPI app in one tap, and
+                the tap most likely to follow a successful payment is the back
+                button - which returns here with no reference number captured
+                and no record that anything was sent. Scanning the code above
+                keeps her in the app that shows her the UTR she has to type. */}
             <div className="small dim center">
               {account.bankName} · A/C {account.accountNo} · {account.ifsc}
             </div>
@@ -131,13 +139,23 @@ export function Subscription() {
                 placeholder="512309887711"
               />
             </Field>
+            {/* This was a button that did nothing - it opened no picker and
+                uploaded nowhere, so an admin checking a disputed ₹50 had only
+                the typed number to go on. It is a real upload now, into the
+                signed `payment` folder rather than among the product photos. */}
             <Field label={`${t('pay.screenshot')} (${t('common.optional')})`}>
-              <Button variant="quiet" size="sm"><IconCamera aria-hidden="true" /> {t('pay.screenshot')}</Button>
+              <PhotoPicker
+                kind="payment"
+                label={t('pay.screenshot')}
+                imageUrl={shot?.url}
+                onUploaded={setShot}
+                onCleared={() => setShot(null)}
+              />
             </Field>
           </div>
         </Card>
 
-        <Button onClick={() => void submit()} disabled={busy}>
+        <Button onClick={() => void submit()} disabled={busy || !isValidUtr(utr)}>
           {busy ? t('common.loading') : t('pay.submit')}
         </Button>
       </div>
@@ -226,14 +244,6 @@ export function PaymentWaiting() {
         </div>
 
         <Notice tone="info">{t('wait.eta')}</Notice>
-
-        {/* The line that stops her calling support. */}
-        <Card className="notice--ok">
-          <div className="row">
-            <span style={{ fontSize: '1.5rem' }} aria-hidden="true"><IconMail /></span>
-            <strong>{t('wait.sms')}</strong>
-          </div>
-        </Card>
 
         {latest && (
           <Card>

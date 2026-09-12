@@ -1,6 +1,9 @@
 import { Router } from 'express'
 import type { Product } from '@shared/types.js'
-import { slotInfo } from '@shared/seller.js'
+import {
+  MAX_EDITS, countsAsEdit, editsAreLimited, editsLeft, initialListingStatus,
+  publishAllowance, publishesLeft, slotInfo,
+} from '@shared/seller.js'
 import { getDb, newId, save } from '../db/store.js'
 import { requireRole } from '../middleware/auth.js'
 import { purgeExpiredRejections } from '../db/moderation.js'
@@ -77,6 +80,25 @@ productsRouter.post('/', requireRole('seller'), (req, res) => {
     return
   }
 
+  /**
+   * THE REPLACEMENT GATE.
+   *
+   * Slots say how many listings may be live at once; this says how many a
+   * pack may ever publish. Archiving frees a slot the instant it happens, so
+   * without this a seller edits twice, archives, uploads the same product
+   * again and has two fresh edits - and the limit on editing is decoration.
+   *
+   * A draft has published nothing yet, so it does not spend one.
+   */
+  if (!asDraft && publishesLeft(seller) <= 0) {
+    res.status(402).json({
+      error: 'No publishes left',
+      messageMr: 'या पॅकमध्ये आणखी नवीन उत्पादन टाकता येणार नाही. आणखी 5 जागांसाठी 50 रुपये भरा.',
+      publishAllowance: publishAllowance(seller),
+    })
+    return
+  }
+
   const fields = listingProblems(b)
 
   if (!asDraft && Object.keys(fields).length) {
@@ -103,24 +125,14 @@ productsRouter.post('/', requireRole('seller'), (req, res) => {
     unit: b.unit ?? 'piece',
     stock: b.madeToOrder ? 0 : Number(b.stock ?? 0),
     madeToOrder: !!b.madeToOrder,
-    /**
-     * HERS TO PUBLISH. Listings used to land in an admin moderation queue and
-     * wait, which meant a woman who added a product on Tuesday could be
-     * invisible until somebody at a desk got to her on Friday - and the
-     * platform exists to remove exactly that kind of gatekeeper from between
-     * her and a customer.
-     *
-     * Moderation is now after the fact, not before it: her phone, her UPI and
-     * her SMB ID are all on the record, she is told so at the moment she
-     * publishes, and an admin can still take a listing down. Accountability
-     * without a queue.
-     */
-    status: asDraft ? 'DRAFT' : 'LIVE',
+    // PENDING, never LIVE - see initialListingStatus. An admin publishes it.
+    status: initialListingStatus(asDraft),
     views: 0,
     createdAt: new Date().toISOString(),
   }
 
   db.products.push(product)
+  if (!asDraft) seller.listingsPublished = (seller.listingsPublished ?? 0) + 1
   save()
   res.status(201).json({ product })
 })
@@ -186,14 +198,51 @@ productsRouter.patch('/:id', requireRole('seller'), (req, res) => {
       })
       return
     }
-    patch.status = 'LIVE'
+    if (publishesLeft(seller) <= 0) {
+      res.status(402).json({
+        error: 'No publishes left',
+        messageMr: 'या पॅकमध्ये आणखी नवीन उत्पादन टाकता येणार नाही. आणखी 5 जागांसाठी 50 रुपये भरा.',
+        publishAllowance: publishAllowance(seller),
+      })
+      return
+    }
+
+    // Publishing a draft is submitting it, exactly like a new listing: the
+    // allowance is spent now, and an admin decides whether it goes live.
+    patch.status = initialListingStatus(false)
+    seller.listingsPublished = (seller.listingsPublished ?? 0) + 1
   }
 
   // Editing a live listing no longer knocks it back into a queue. She can fix
   // a price or a photo and have the change go live, which is what editing
   // means everywhere else she has ever used a phone.
 
-  db.products[i] = { ...current, ...patch } as Product
+  /**
+   * THE EDIT LIMIT. Two changes to what the listing IS, then no more.
+   *
+   * `countsAsEdit` compares values rather than keys, because this form posts
+   * the whole product on every save: opening the screen, changing nothing and
+   * pressing save must not cost her one. Price and stock are outside the
+   * count entirely - see EDIT_COUNTED_FIELDS for why.
+   *
+   * The client disables the button at zero, which is a courtesy. This is the
+   * rule.
+   */
+  const merged = { ...current, ...patch } as Product
+  const spendsAnEdit = editsAreLimited(current.status) && countsAsEdit(current, merged)
+
+  if (spendsAnEdit && editsLeft(current) <= 0) {
+    res.status(409).json({
+      error: 'No edits left',
+      messageMr: `या उत्पादनात ${MAX_EDITS} वेळा बदल करून झाले आहेत. किंमत आणि साठा मात्र कधीही बदलता येतो.`,
+      editsLeft: 0,
+    })
+    return
+  }
+
+  if (spendsAnEdit) merged.editCount = (current.editCount ?? 0) + 1
+
+  db.products[i] = merged
   save()
   res.json({ product: db.products[i] })
 })

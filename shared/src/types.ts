@@ -220,6 +220,12 @@ export interface Seller {
   blockedAt?: string
   blockReason?: string
   packsApproved: number
+  /**
+   * Listings published over the life of the account, archived ones included.
+   * Counted because archiving frees a slot instantly, so without it the edit
+   * limit is avoided by taking a listing down and putting a new one up.
+   */
+  listingsPublished?: number
   /** Admin decisions about her account, newest last. Trimmed on write. */
   notices?: AdminNotice[]
   rating: number
@@ -281,6 +287,12 @@ export interface Product {
    */
   rejectedAt?: string
   views: number
+  /**
+   * How many of MAX_EDITS the seller has spent on this listing. Absent on
+   * anything published before the rule existed, which reads as none used -
+   * nobody loses an edit to a change they made when editing was free.
+   */
+  editCount?: number
   createdAt: string
 }
 
@@ -370,6 +382,12 @@ export interface Customer {
 export interface CartItem {
   productId: string
   sellerId: string
+  /**
+   * The shop's name, copied in when the item was added. The cart holds one
+   * seller's goods and has to be able to say whose without waiting on the
+   * catalogue to load - a refusal that names no shop explains nothing.
+   */
+  sellerName?: string
   name: string
   emoji: string
   price: number
@@ -417,6 +435,8 @@ export interface AdminStats {
   totalSellers: number
   newRegistrations: number
   pendingPayments: number
+  /** Listings waiting for an admin to publish them. */
+  pendingProducts: number
   stuckOrders: number
   openDisputes: number
   womenEarnedTotal: number

@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import type { AdminNotice, Seller } from '@shared/types.js'
-import { adminFeed, mergeFeeds, noticeLabelKey } from '../src/lib/notifications.js'
+import type { AdminNotice, Order, Seller } from '@shared/types.js'
+import { adminFeed, buildFeed, mergeFeeds, noticeLabelKey } from '../src/lib/notifications.js'
 import { dictionaries } from '../src/i18n/strings.js'
 
 /**
@@ -51,6 +51,79 @@ test('every line the feed can print exists in both languages', () => {
     }
   }
   assert.deepEqual(missing, [])
+})
+
+/* ------------------------------------------------------------------ */
+/* One row per order                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * An order walking its four states used to announce itself four times, the
+ * rows identical apart from the verb and the same total printed on each. What
+ * a woman waiting at home wants is one answer to "where is my order", not its
+ * history read back to her as four separate pieces of news.
+ */
+function order(events: Order['events'], status: Order['status'] = 'DELIVERED'): Order {
+  return {
+    id: 'SMB5013',
+    status,
+    total: 444,
+    customerName: 'रेखा',
+    items: [
+      { productId: 'p1', name: 'आंब्याचे लोणचे', emoji: '🫙', qty: 1, price: 220 },
+      { productId: 'p2', name: 'कांदा लसूण मसाला', emoji: '🌶️', qty: 2, price: 180 },
+    ],
+    events,
+  } as Order
+}
+
+const WALK: Order['events'] = [
+  { to: 'PLACED', at: '2026-09-09T10:00:00.000Z', by: 'customer' },
+  { to: 'ACCEPTED', at: '2026-09-09T11:00:00.000Z', by: 'seller' },
+  { to: 'PACKED', at: '2026-09-09T12:00:00.000Z', by: 'seller' },
+  { to: 'OUT_FOR_DELIVERY', at: '2026-09-09T13:00:00.000Z', by: 'seller' },
+  { to: 'DELIVERED', at: '2026-09-09T14:00:00.000Z', by: 'seller' },
+]
+
+test('four events on one order are one row, not four', () => {
+  const feed = buildFeed([order(WALK)], 'customer')
+  assert.equal(feed.length, 1)
+  assert.equal(feed[0]?.id, 'SMB5013', 'the order IS the row, so it keys on the order')
+})
+
+test('the row shows where the order is NOW', () => {
+  const [row] = buildFeed([order(WALK)], 'customer')
+  assert.equal(row?.status, 'DELIVERED')
+  assert.equal(row?.at, '2026-09-09T14:00:00.000Z', 'timed by the latest move, so it reads as new again')
+})
+
+/** Out-of-order events must not make an older timestamp win. */
+test('the row is timed by the latest event however they are ordered', () => {
+  const shuffled = [WALK[4]!, WALK[1]!, WALK[3]!, WALK[2]!]
+  assert.equal(buildFeed([order(shuffled)], 'customer')[0]?.at, '2026-09-09T14:00:00.000Z')
+})
+
+/**
+ * The seller's tag is the ORDER's state, not her buyer's last move.
+ *
+ * A customer only ever causes PLACED and CANCELLED, so a tag drawn from the
+ * other side's last event left every row on the seller's list reading "new
+ * order" for ever - including the ones she had packed and handed over herself.
+ */
+test("the seller's row shows where the order actually is", () => {
+  const [row] = buildFeed([order(WALK, 'OUT_FOR_DELIVERY')], 'seller')
+  assert.equal(row?.status, 'OUT_FOR_DELIVERY')
+  assert.notEqual(row?.status, 'PLACED', 'not frozen at what the buyer did')
+})
+
+test('the row is named after what is in the order, with the rest counted', () => {
+  assert.equal(buildFeed([order(WALK)], 'customer')[0]?.title, 'आंब्याचे लोणचे +1')
+})
+
+/** Her own actions are not news to her - the seller placed nothing. */
+test('an order with nothing from the other side is not a row at all', () => {
+  const mineOnly = [{ to: 'ACCEPTED' as const, at: '2026-09-09T11:00:00.000Z', by: 'seller' as const }]
+  assert.deepEqual(buildFeed([order(mineOnly)], 'seller'), [])
 })
 
 /* ------------------------------------------------------------------ */

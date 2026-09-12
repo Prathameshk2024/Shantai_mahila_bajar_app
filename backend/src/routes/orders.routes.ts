@@ -5,6 +5,7 @@ import {
   initialPaymentStatus,
 } from '@shared/orderFlow.js'
 import { isMaharashtraPincode } from '@shared/seller.js'
+import { normalizeUtr, utrProblem } from '@shared/payment.js'
 import { getDb, save } from '../db/store.js'
 import { recordOrderCustomer } from '../db/customers.js'
 import { newShortId } from '../db/ids.js'
@@ -275,7 +276,7 @@ ordersRouter.post('/:id/pay', requireRole('customer'), (req, res) => {
     (o) => o.id === req.params.id && o.customerId === req.auth!.customerId,
   )
   if (!order) {
-    res.status(404).json({ error: 'Order not found', messageMr: 'ही ऑर्डर सापडली नाही' })
+    res.status(404).json({ error: 'Order not found', messageMr: 'हे ऑर्डर सापडले नाही' })
     return
   }
 
@@ -287,12 +288,31 @@ ordersRouter.post('/:id/pay', requireRole('customer'), (req, res) => {
     return
   }
 
-  const utr = String(req.body?.utr ?? '').replace(/\s/g, '')
-  if (utr.length < 6) {
-    res.status(400).json({
-      error: 'UTR required',
-      messageMr: 'पेमेंट झाल्यावर मिळणारा क्रमांक टाका',
-      fields: { utr: 'required' },
+  const utr = normalizeUtr(req.body?.utr)
+  const problem = utrProblem(utr)
+  if (problem) {
+    res.status(400).json({ error: 'Invalid UTR', messageMr: problem, fields: { utr: problem } })
+    return
+  }
+
+  /**
+   * One transaction has one RRN, so the same twelve digits on a second order
+   * is either a slip - she paid once and typed it twice - or somebody walking
+   * one real payment across several orders.
+   *
+   * A seller confirms payments by eye, against a statement that shows each
+   * reference once, and duplicates are exactly what that check cannot catch:
+   * the line is there, it just is not for this order. Subscription payments
+   * already flag this for the admin; an order has no admin in the loop, so
+   * here it is refused outright. The same UTR on THIS order is left alone -
+   * that is a woman correcting a digit, not a second claim.
+   */
+  const usedElsewhere = db.orders.some((o) => o.id !== order.id && o.paymentUtr === utr)
+  if (usedElsewhere) {
+    res.status(409).json({
+      error: 'UTR already used on another order',
+      messageMr: 'हा क्रमांक दुसऱ्या ऑर्डरसाठी वापरला आहे. तुमच्या UPI ॲपमधला याच ऑर्डरचा क्रमांक टाका',
+      fields: { utr: 'हा क्रमांक दुसऱ्या ऑर्डरसाठी वापरला आहे' },
     })
     return
   }
