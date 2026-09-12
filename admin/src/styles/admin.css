@@ -586,3 +586,24 @@ table.t tr:last-child td { border-bottom: 0; }
 .toast__go:hover { background: rgba(255, 255, 255, 0.16); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+/**
+ * Order detail, in the browser's own top layer.
+ *
+ * It used to be an ordinary card appended after the table, so opening row 30
+ * of a long list rendered the detail below the whole page and nothing appeared
+ * to happen. `<dialog showModal>` puts it in view wherever the page is
+ * scrolled, and brings Esc, the backdrop and a focus trap with it - none of
+ * which is worth hand-writing.
+ */
+.dlg {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--ink);
+}
+.dlg::backdrop { background: rgba(0, 0, 0, 0.45); }

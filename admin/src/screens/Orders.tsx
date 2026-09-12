@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { OrderStatus } from '@shared/types.js'
 import { useT } from '../i18n/I18nProvider.js'
 import { IconOrders } from '../components/icons.js'
@@ -118,12 +118,38 @@ export function Orders() {
  * Inside one order the buyer is shown in full - that is the point of opening
  * it. Support cannot resolve "where is my order" without being able to call
  * the person who placed it.
+ *
+ * IN A DIALOG, NOT APPENDED TO THE PAGE. This used to render as one more card
+ * after the table and the footnote, so opening the thirtieth row of a long
+ * list drew the detail somewhere below the fold and, from the admin's side,
+ * the Open button simply did nothing. `showModal()` puts it in the browser's
+ * top layer - in view wherever the page is scrolled - and brings Esc, the
+ * backdrop and a focus trap with it, none of which is worth hand-writing.
  */
 function OrderDetail({ order, onClose }: { order: OrderRow; onClose: () => void }) {
   const t = useT()
   const last = order.events[order.events.length - 1]
+  const ref = useRef<HTMLDialogElement>(null)
+
+  /* No close() in a cleanup. StrictMode runs effect, cleanup, effect in
+     development, and close() queues a `close` event that lands AFTER the
+     second showModal() - onClose then unmounted the dialog it had just opened,
+     so Open did nothing and logged nothing. Unmounting takes the element out
+     of the top layer on its own; the `open` guard covers the second run. */
+  useEffect(() => {
+    const dialog = ref.current
+    if (dialog && !dialog.open) dialog.showModal()
+  }, [])
 
   return (
+    <dialog
+      ref={ref}
+      className="dlg"
+      onClose={onClose}
+      /* A click that lands on the dialog element itself is a click on the
+         backdrop - the content is inside the Card, which stops it there. */
+      onClick={(e) => { if (e.target === ref.current) onClose() }}
+    >
     <Card>
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <div className="row" style={{ gap: 8 }}>
@@ -131,7 +157,8 @@ function OrderDetail({ order, onClose }: { order: OrderRow; onClose: () => void 
           <Pill>{order.status}</Pill>
           {isStuck(order) && <Pill tone="danger">{t('or.stuck')}</Pill>}
         </div>
-        <Button variant="quiet" small onClick={onClose}>{t('c.cancel')}</Button>
+        {/* Close, not Cancel: nothing is being abandoned, this panel only reads. */}
+        <Button variant="quiet" small onClick={onClose}>{t('c.close')}</Button>
       </div>
 
       <div className="stack-sm" style={{ marginTop: 12 }}>
@@ -179,5 +206,6 @@ function OrderDetail({ order, onClose }: { order: OrderRow; onClose: () => void 
         )}
       </div>
     </Card>
+    </dialog>
   )
 }
