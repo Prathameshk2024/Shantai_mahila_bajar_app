@@ -413,6 +413,8 @@ Both landing photo strips are one component, `PhotoRotator`, cross-fading every 
 
 One Cloud Run service (`shantai-api`, `asia-south1` — the API) and two Vercel projects from this same repo, distinguished only by Root Directory (`frontend` and `admin`). `VITE_API_URL` is read at **build** time, so changing it means redeploying.
 
+**The app is the `prathamesh2` branch, and both Vercel projects must track it by name.** `main` holds only the initial commit and `prathamesh` — GitHub's default branch — is an older copy from 8 September with no `admin/` and a lockfile missing rollup's Linux binary, so every default Vercel reaches for builds the wrong code or fails outright. The two branches share nothing after the initial commit; do not merge `prathamesh` in.
+
 The service needs two settings that are not Cloud Run's defaults, and neither is visible from the outside:
 
 - **Maximum instances 1.** See *Persistence* above. The default is 100.

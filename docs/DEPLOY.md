@@ -149,9 +149,21 @@ Deployment → Root Directory*:
   Vercel knows a commit to `shared/` alone affects them. Remove it and such a
   commit deploys neither app.
 
-**Production is the branch Vercel is told it is** — `main` unless changed in
-*Settings → Git*. Pushing any other branch makes a preview deployment, on its
-own URL, which §3 will then block.
+**Production is the branch Vercel is told it is**, and in this repository no
+default picks the right one. On import Vercel chooses `main` if it exists,
+and here `main` holds only the initial commit; GitHub's default branch is
+`prathamesh`, an older copy of the app from 8 September with no `admin/`
+folder, and a root `package-lock.json` written on Windows that is missing
+rollup's Linux binary. The first deployment built that branch and failed with
+`Cannot find module @rollup/rollup-linux-x64-gnu`. The app is `prathamesh2`.
+
+Set it in both projects: *Settings → Environments → Production → Branch
+Tracking*, then *Deployments → Create Deployment* with the branch name. Do not
+merge `prathamesh` into it — the two branches share nothing after the initial
+commit, and its commits are an older version of the same files.
+
+Pushing any other branch makes a preview deployment, on its own URL, which §3
+will then block.
 
 ### Both projects need their `vercel.json` — it is already in the repo
 
