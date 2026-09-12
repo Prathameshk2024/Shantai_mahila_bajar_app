@@ -252,7 +252,7 @@ adminRouter.post('/sellers/:id/revoke-slots', (req, res) => {
 
   const packs = Math.max(1, Number(req.body?.packs ?? 1))
   const used = db.products.filter(
-    (p) => p.sellerId === seller.id && p.status !== 'ARCHIVED',
+    (p) => p.sellerId === seller.id,
   ).length
   const remaining = Math.max(0, seller.packsApproved - packs)
 
@@ -377,7 +377,7 @@ adminRouter.get('/sellers', (_req, res) => {
   res.json({
     sellers: db.sellers.map((s) => {
       const products = db.products.filter(
-        (p) => p.sellerId === s.id && p.status !== 'ARCHIVED',
+        (p) => p.sellerId === s.id,
       )
       return { ...s, slots: slotInfo(s, products), productCount: products.length }
     }),
@@ -403,7 +403,7 @@ adminRouter.get('/sellers/:id', (req, res) => {
   // Archived listings are excluded exactly as they are in the register, so
   // "3 products" means the same number on both screens.
   const products = db.products.filter(
-    (p) => p.sellerId === seller.id && p.status !== 'ARCHIVED',
+    (p) => p.sellerId === seller.id,
   )
   const orders = db.orders
     .filter((o) => o.sellerId === seller.id)
