@@ -63,6 +63,8 @@ The backend is `module: NodeNext`, which requires the `.js` extension at runtime
 
 `shared/` is not built — it is consumed as TypeScript source. A change there is a compile error on whichever side has not caught up, which is the point.
 
+`frontend/` and `admin/` still list `"@shantai/shared": "*"` in `dependencies`, although no import names that package. The line is for Vercel, not for the code: it skips deploying a monorepo project whose commit touched nothing it depends on, and it learns the dependencies from `package.json` alone. Without it, a commit that changes only `orderFlow.ts` or `payment.ts` would redeploy neither app, and the live site would keep enforcing the old rule. Do not remove it as unused.
+
 ## Architecture
 
 ### Persistence: one synchronous interface, two drivers
@@ -74,7 +76,7 @@ Consequences that matter when changing anything in `backend/src/`:
 - **`initStore()` must finish before the first request.** `index.ts` awaits it.
 - **Writes are diffed, not blanket.** Only changed documents are sent. Do not introduce a code path that rewrites whole collections.
 - **No single persist may delete more than half a collection.** `isBulkDelete()` in `firestore.ts` refuses it, keeps the documents, and logs loudly; `ALLOW_BULK_DELETE=true` on the one command that means it is the override. This exists because on 10 September 2026 a persist whose in-memory `sellers` and `products` were empty deleted six real sellers and thirteen products, recovered only from Firestore's one-hour version history. A refusal means memory and the server disagree — find out why before trusting that process.
-- **This is correct for exactly ONE server process.** Two instances each hold their own snapshot and silently overwrite each other. Render is pinned to one instance; autoscaling must stay off. Outgrowing this means converting route handlers to async per-document reads — real work, not a config change.
+- **This is correct for exactly ONE server process.** Two instances each hold their own snapshot and silently overwrite each other. Cloud Run is pinned to `--max-instances=1`, and a deploy is the one moment that ceiling does not hold: the new revision starts before the old one has drained, so for a few seconds there are two. Deploy when nobody is placing orders. Outgrowing this means converting route handlers to async per-document reads — real work, not a config change.
 - A Firestore connection failure at boot **falls back to the JSON file** and says so loudly. Reads and writes track the same `firestoreLive` flag so they can never disagree.
 - An empty database stays empty unless `SEED_DEMO_DATA` is set. Never make seeding automatic — it would put invented sellers in front of real customers.
 
@@ -92,7 +94,7 @@ Firebase is **server-side only**, via `firebase-admin` with a service account. T
   - **MSG91 widget** (`MSG91_AUTH_KEY` + `MSG91_WIDGET_ID`) — what production uses, because it needs no DLT registration. The browser sends *and* checks the code, then hands back a JWT; `otp.providers.ts` trades that JWT for the number it was issued for and **refuses it unless it matches the phone in the request**. That comparison is the whole security of the path — a token only proves *some* number was verified. The frontend half is `lib/msg91Widget.ts`, using `exposeMethods: true` so the app keeps its own OTP screen rather than MSG91's English modal.
   - **Server-side** (no widget configured) — 6 digits from the CSPRNG, stored as an HMAC, single-use, 5-minute TTL, destroyed after 5 wrong guesses. Demo mode returns the code in the response so the app is walkable; it is a real code that is really checked, and production refuses to boot on this path.
   - `verifyOtp` checks `provider.verify` **before** the six-digit format test — a widget JWT is not six digits, and that ordering is what lets it through. `sendOtp` delivers nothing on the widget path - the SMS already went out from the browser - but the app calls `/auth/otp/send` **before** it asks the widget to send, because that route is where the per-number quota is counted. Skipping it made "three codes a day" a comment rather than a limit.
-- **Rate limits** live in `auth/rateLimit.ts`, keyed by *both* subject and IP. This needs `app.set('trust proxy', 1)`; without it Render's balancer makes every request share one address. The send ceiling is **three codes per number per 24h** — an SMS bill, not a security knob. `retryInMr()` in `auth.routes.ts` says that back in days or hours; "1440 मिनिटांनी" is a number rather than an answer, and it inflects for one, because "1 दिवसांनी" tells a woman this was not written for her on the one screen where she is already being told no.
+- **Rate limits** live in `auth/rateLimit.ts`, keyed by *both* subject and IP. This needs `app.set('trust proxy', 1)`; without it Cloud Run's front end makes every request share one address. The send ceiling is **three codes per number per 24h** — an SMS bill, not a security knob. `retryInMr()` in `auth.routes.ts` says that back in days or hours; "1440 मिनिटांनी" is a number rather than an answer, and it inflects for one, because "1 दिवसांनी" tells a woman this was not written for her on the one screen where she is already being told no.
 - **Admins** are database records with scrypt hashes (`auth/admins.ts`), managed by `npm run admin:users`. There is no `ADMIN_PASSWORD`.
 - **Idle windows, not absolute**: admin 8h, seller/customer 7 days. Different because the risk differs, and because re-issuing a seller's token costs an SMS. There is also an **absolute** ceiling (admin 7d, others 90d) so a copied token cannot be kept alive forever by being used.
 - Past halfway through the window the server re-stamps the token onto the **`X-Session-Token`** response header; `frontend/src/lib/api.ts` and `admin/src/lib/api.ts` swap it in. This header must stay in the CORS `exposedHeaders` list or every session expires on a timer regardless of activity.
@@ -409,7 +411,14 @@ Both landing photo strips are one component, `PhotoRotator`, cross-fading every 
 
 ## Deployment shape
 
-One Render web service (the API, **one instance**) and two Vercel projects from this same repo, distinguished only by Root Directory (`frontend` and `admin`). `VITE_API_URL` is read at **build** time, so changing it means redeploying.
+One Cloud Run service (`shantai-api`, `asia-south1` — the API) and two Vercel projects from this same repo, distinguished only by Root Directory (`frontend` and `admin`). `VITE_API_URL` is read at **build** time, so changing it means redeploying.
+
+The service needs two settings that are not Cloud Run's defaults, and neither is visible from the outside:
+
+- **Maximum instances 1.** See *Persistence* above. The default is 100.
+- **CPU always allocated** (`--no-cpu-throttling`). `save()` writes 400ms *after* the response has gone, and by default Cloud Run takes the CPU away the moment a response is sent — the write then waits for the next request, or for the `SIGTERM` flush when the instance is stopped.
+
+How the container is built is not recorded in this repo: there is no Dockerfile and no `cloudbuild.yaml`. `docs/DEPLOY.md` says so, and is where that command belongs once somebody writes it down.
 
 **Both apps route in the browser, so both need `vercel.json`** — one catch-all rewrite to `index.html`, already committed in each folder. Without it every URL but the home page 404s on reload, which is the first thing anyone does with a link they were sent.
 

@@ -1,9 +1,9 @@
-# Deployment — Render + two Vercel projects
+# Deployment — Cloud Run + two Vercel projects
 
 The shape:
 
 ```
-        Render                          Vercel project 1
+       Cloud Run                        Vercel project 1
    ┌──────────────────┐            ┌──────────────────────┐
    │  Express API     │ ◄───────── │  seller + buyer app  │   frontend/
    │  + Firestore     │            └──────────────────────┘
@@ -19,16 +19,49 @@ deploy independently while still sharing `shared/src/types.ts`.
 
 ---
 
-## 1. Render — the API
+## 1. Cloud Run — the API
 
-**Service type:** Web Service, from this repo.
+The live service:
 
-| Setting | Value |
+| | |
 |---|---|
-| Root Directory | *(repo root — leave blank)* |
-| Build Command | `npm ci && npm --workspace @shantai/backend run build` |
-| Start Command | `npm --workspace @shantai/backend run start` |
-| Instance count | **1 — see the warning below** |
+| Service | `shantai-api` |
+| Region | `asia-south1` (Mumbai) |
+| URL | `https://shantai-api-204453348000.asia-south1.run.app` |
+
+**How the container is built is not recorded in this repo.** There is no
+Dockerfile and no `cloudbuild.yaml`, so the build lives in someone's shell
+history or in the Cloud Console. Whoever deploys next: write the exact command
+here. What the repo does say is the build and start step:
+
+```bash
+npm ci && npm --workspace @shantai/backend run build
+npm --workspace @shantai/backend run start
+```
+
+### Two settings that are not Cloud Run's defaults
+
+| Setting | Value | Default | Why |
+|---|---|---|---|
+| Maximum instances | **1** | 100 | See the warning below. |
+| CPU allocation | **Always allocated** | Only during requests | `save()` writes 400 ms *after* the response is sent. With the default, Cloud Run takes the CPU away the moment the response goes, and the write waits for the next request or for shutdown. |
+
+Neither is visible from outside the service, so check them rather than assume:
+
+```bash
+gcloud run services describe shantai-api --region asia-south1 --project <PROJECT_ID>
+```
+
+Look for `autoscaling.knative.dev/maxScale: '1'` and
+`run.googleapis.com/cpu-throttling: 'false'`. To set both:
+
+```bash
+gcloud run services update shantai-api --region asia-south1 --project <PROJECT_ID> \
+  --max-instances 1 --no-cpu-throttling
+```
+
+`<PROJECT_ID>` is the project's name, not the number in the URL — gcloud
+refuses the number.
 
 ### ⚠ Exactly one instance. Not two.
 
@@ -38,27 +71,37 @@ for **one** process only. Two instances each hold their own snapshot and
 overwrite each other's writes — orders vanish, sellers reappear after deletion,
 and nothing in the logs says why.
 
-So: **do not enable autoscaling on this service.** If you outgrow one instance,
-the fix is to convert the route handlers to async per-document Firestore reads
-first. It is a real piece of work, not a config change.
+So: **maximum instances stays at 1.** If you outgrow one instance, the fix is
+to convert the route handlers to async per-document Firestore reads first. It
+is a real piece of work, not a config change.
+
+**A deploy is the one moment the ceiling does not hold.** Maximum instances is
+counted per revision, and a new revision starts and takes traffic before the
+old one has finished draining — for a few seconds there are two processes.
+Every deploy, and every environment-variable change (which is a deploy), does
+this. Do it when nobody is placing orders, not in the evening.
 
 ### Environment variables
 
-Set these in the Render dashboard. Render injects `PORT` itself — do not set it.
+Set these on the service (Console → *Edit & deploy new revision* → *Variables
+& Secrets*). Cloud Run sets `PORT` itself and `config.ts` reads it — do not set
+it. The four marked secret belong in Secret Manager rather than as plain
+variables, where anyone with viewer access to the project can read them.
 
 | Variable | Notes |
 |---|---|
 | `NODE_ENV` | `production` |
-| `SESSION_SECRET` | **Required.** The server refuses to boot without it. Generate a fresh one, do not reuse your local value. |
-| `FIREBASE_SERVICE_ACCOUNT` | The whole service-account JSON on one line. |
-| `CLOUDINARY_URL` | `cloudinary://key:secret@cloud` from the Cloudinary dashboard. |
+| `SESSION_SECRET` | **Secret. Required.** The server refuses to boot without it. Generate a fresh one, do not reuse your local value. Changing it later signs every user out. |
+| `FIREBASE_SERVICE_ACCOUNT` | **Secret.** The whole service-account JSON on one line. |
+| `CLOUDINARY_URL` | **Secret.** `cloudinary://key:secret@cloud` from the Cloudinary dashboard. |
 | `CLOUDINARY_FOLDER` | `shanta-mahila-bazar` |
 | `CORS_ORIGIN` | Both Vercel URLs, comma-separated. See §3. |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | **Change the password.** It is the only thing guarding the admin API. |
+| `ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD_HASH` | First sign-in only, while no administrator exists. Make the hash locally with `npm run admin:users -- hash` — Cloud Run has no shell to run it in. Remove both once a real account exists. There is no `ADMIN_PASSWORD`. |
 | `MSG91_AUTH_KEY` | **Secret.** The account Auth Key, and the only thing that can check a widget token. Never copy it into a `VITE_*` variable. |
 | `MSG91_WIDGET_ID` | The OTP widget's id. With `MSG91_AUTH_KEY` this selects the widget, which needs no DLT registration. |
 | `MSG91_TEMPLATE_ID` / `MSG91_SENDER` | Only for your own DLT-approved template. Leave unset while using the widget. |
 | `SEED_DEMO_DATA` | Leave unset. Setting it would put invented sellers in front of real customers. |
+| `ALLOW_BULK_DELETE` | Leave unset. It is for one command run by hand, never for the service. |
 
 Generate the session secret with:
 
@@ -66,15 +109,17 @@ Generate the session secret with:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-### The free tier sleeps
+### Cold starts
 
-A free Render service spins down after ~15 minutes idle, and the next request
-waits ~50 seconds while it wakes. For a seller on a rural connection that reads
-as a broken app. The paid tier removes it.
+With minimum instances at 0, Cloud Run stops an idle instance, and the next
+request waits while a new one boots — and boot here means loading the **whole
+database** from Firestore before the first request is answered. For a seller on
+a rural connection that wait reads as a broken app. `--min-instances 1` keeps
+one warm and is billed for it.
 
-Sleeping itself is safe: `backend/src/index.ts` flushes pending writes on
-`SIGTERM`, which is what Render sends first, so the 400 ms write-coalescing
-window is not lost.
+Stopping itself is safe: Cloud Run sends `SIGTERM` ten seconds before it kills
+an instance, and `backend/src/index.ts` flushes pending writes on it, so the
+400 ms write-coalescing window is not lost.
 
 ---
 
@@ -87,10 +132,26 @@ the Root Directory.
 |---|---|---|
 | Root Directory | `frontend` | `admin` |
 | Framework preset | Vite | Vite |
-| Environment variables | `VITE_API_URL=https://<your-api>.onrender.com`<br>`VITE_MSG91_WIDGET_ID=...`<br>`VITE_MSG91_TOKEN_AUTH=...` | `VITE_API_URL` only |
+| Environment variables | `VITE_API_URL=https://shantai-api-204453348000.asia-south1.run.app`<br>`VITE_MSG91_WIDGET_ID=...`<br>`VITE_MSG91_TOKEN_AUTH=...` | `VITE_API_URL` only |
 
 Vercel detects the npm workspaces and installs from the repo root, so `shared/`
-resolves normally.
+resolves normally. Your local `.env` files are gitignored, so Vercel sees none
+of them — every value above is typed into the dashboard.
+
+Two Root Directory settings matter here, and both are in *Settings → Build and
+Deployment → Root Directory*:
+
+- **Include source files outside of the Root Directory** must stay **on** (it
+  is, by default). Both apps read `../shared/src` straight off disk; with it off
+  the build fails because `tsc` cannot find it.
+- **Skip deployment** can stay on, because `frontend/package.json` and
+  `admin/package.json` both declare `"@shantai/shared": "*"`. That line is how
+  Vercel knows a commit to `shared/` alone affects them. Remove it and such a
+  commit deploys neither app.
+
+**Production is the branch Vercel is told it is** — `main` unless changed in
+*Settings → Git*. Pushing any other branch makes a preview deployment, on its
+own URL, which §3 will then block.
 
 ### Both projects need their `vercel.json` — it is already in the repo
 
@@ -120,8 +181,8 @@ the MSG91 pair belongs to project 1 alone.
 
 The two MSG91 values here are public by design; the browser cannot run the
 widget without them. **`MSG91_AUTH_KEY` is not one of them** — it lives on
-Render only. Anything named `VITE_*` is inlined into the JS bundle that ships
-to every phone, so putting the auth key here would publish it.
+Cloud Run only. Anything named `VITE_*` is inlined into the JS bundle that
+ships to every phone, so putting the auth key here would publish it.
 
 MSG91's widget settings restrict which domains may use it. Add the Vercel URL
 there, or the widget loads and then refuses to send.
@@ -149,8 +210,17 @@ Rules worth knowing:
 - **Vercel preview deployments get their own URLs** (`...-git-branch-....vercel.app`)
   and will be blocked. Either add the ones you use, or test previews against a
   separate API.
+- **gcloud splits `--update-env-vars` on commas too**, so the obvious command
+  sets `CORS_ORIGIN` to the first URL and treats the second as a malformed
+  variable. Change the delimiter with gcloud's `^;^` prefix:
 
-Confirm it on boot — the banner prints what is active:
+  ```bash
+  gcloud run services update shantai-api --region asia-south1 --project <PROJECT_ID> \
+    --update-env-vars "^;^CORS_ORIGIN=https://shanta-bazar.vercel.app,https://shanta-admin.vercel.app"
+  ```
+
+Confirm it on boot — the banner prints what is active, in the service's
+*Logs* tab:
 
 ```
   Database       Firestore (shantaimahilabajar)
@@ -170,10 +240,12 @@ and `MSG91_WIDGET_ID` are set, since either alone falls back.
 CORS needs the Vercel URLs, and Vercel needs the API URL, so it takes two
 passes:
 
-1. Deploy the API to Render. Set everything except `CORS_ORIGIN`.
-2. Deploy both Vercel projects with `VITE_API_URL` pointing at Render, and the
-   `VITE_MSG91_*` pair on project 1.
-3. Set `CORS_ORIGIN` on Render to the two Vercel URLs. Render restarts.
+1. Deploy the API to Cloud Run with maximum instances 1 and CPU always
+   allocated. Set everything except `CORS_ORIGIN`.
+2. Deploy both Vercel projects with `VITE_API_URL` pointing at Cloud Run, and
+   the `VITE_MSG91_*` pair on project 1.
+3. Set `CORS_ORIGIN` on Cloud Run to the two Vercel URLs (the `^;^` command in
+   §3). That makes a new revision — the same quiet-moment rule applies.
 4. Add the project-1 Vercel URL to the MSG91 widget's allowed domains.
 5. Deploy the Firestore rules: `firebase deploy --only firestore:rules`.
 6. Check the boot banner shows Firestore, Cloudinary, the MSG91 widget and both
@@ -185,16 +257,15 @@ passes:
 
 ## 5. Before real users
 
-- [ ] `ADMIN_PASSWORD` changed from `changeme`
-- [ ] `SESSION_SECRET` set to a fresh random value
+- [ ] `SESSION_SECRET` set to a fresh random value — changing it later signs every user out
 - [ ] MSG91 configured — **the API refuses to boot in production without it**, because demo mode returns the login code in the HTTP response
 - [ ] `VITE_MSG91_WIDGET_ID` + `VITE_MSG91_TOKEN_AUTH` set on the Vercel frontend project, and the Vercel URL added to the widget's allowed domains
-- [ ] `MSG91_AUTH_KEY` appears **only** on Render, never in a `VITE_*` variable
+- [ ] `MSG91_AUTH_KEY` appears **only** on Cloud Run, never in a `VITE_*` variable
 - [ ] The auth key committed in `.env.example` at `a0775b7` has been rotated — deleting the line did not revoke it
 - [ ] `ADMIN_BOOTSTRAP_EMAIL` + `ADMIN_BOOTSTRAP_PASSWORD_HASH` set for the first sign-in (`npm run admin:users -- hash`), then removed once a real administrator exists
-- [ ] `SESSION_SECRET` set — changing it later signs every user out
 - [ ] `CORS_ORIGIN` set to both origins
-- [ ] Render instance count is 1, autoscaling off
+- [ ] Cloud Run maximum instances is 1
+- [ ] Cloud Run CPU is always allocated (`cpu-throttling: 'false'`)
 - [ ] `firestore.rules` deployed
 - [ ] `SEED_DEMO_DATA` unset
 - [ ] `robots.txt` with `Disallow: /` on the admin project
@@ -208,7 +279,7 @@ through, so `VITE_API_URL` **must** be set at build time:
 
 ```bash
 cd frontend
-VITE_API_URL=https://<your-api>.onrender.com npm run cap:sync
+VITE_API_URL=https://shantai-api-204453348000.asia-south1.run.app npm run cap:sync
 npm run cap:open
 ```
 
