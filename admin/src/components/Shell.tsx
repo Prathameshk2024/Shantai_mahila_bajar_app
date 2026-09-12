@@ -85,7 +85,9 @@ export function Shell() {
   return (
     <div className="shell">
       <aside className="side">
-        <div className="side__brand">
+        {/* The mark goes home, the way a masthead does everywhere else. It was
+            the only thing on the page that looked clickable and was not. */}
+        <Link className="side__brand" to="/" aria-label={t('nav.home')}>
           {/* शांताबाई, the woman the market is named for. Decorative here -
               her name is the line printed beside it. */}
           <img className="side__logo" src={logo} alt="" aria-hidden="true" />
@@ -93,7 +95,7 @@ export function Shell() {
             <div className="side__name">{t('app.name')}</div>
             <div className="side__role">{t('app.admin')}</div>
           </div>
-        </div>
+        </Link>
 
         <nav className="side__nav">
           {items.map(({ to, end, icon: Icon, label, badge }) => (

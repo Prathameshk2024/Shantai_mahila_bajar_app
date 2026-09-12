@@ -36,7 +36,7 @@ export function Home() {
     { to: '/sellers', icon: IconSellers, label: t('nav.sellers'), body: t('home.sectionSellers') },
     { to: '/orders', icon: IconOrders, label: t('nav.orders'), body: t('home.sectionOrders'), badge: s?.stuckOrders },
     { to: '/impact', icon: IconImpact, label: t('nav.impact'), body: t('home.sectionImpact') },
-    { to: '/today', icon: IconToday, label: t('nav.today'), body: t('today.funnel') },
+    { to: '/today', icon: IconToday, label: t('nav.today'), body: t('home.sectionToday') },
   ]
 
   return (

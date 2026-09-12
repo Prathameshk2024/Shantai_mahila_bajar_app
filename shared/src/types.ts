@@ -447,7 +447,6 @@ export interface AdminStats {
   /** How many payments that total is made of. */
   approvedPaymentCount: number
   repurchaseRate: number
-  funnel: { mr: string; en: string; v: number }[]
   earningBands: { label: string; v: number }[]
   readinessBands: { band: ReadinessBand; v: number }[]
 }

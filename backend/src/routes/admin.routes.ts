@@ -129,13 +129,6 @@ adminRouter.get('/stats', (_req, res) => {
     subscriptionRevenue: approvedPayments.reduce((n, p) => n + (Number(p.amount) || 0), 0),
     approvedPaymentCount: approvedPayments.length,
     repurchaseRate: db.sellers.length ? repurchasers / db.sellers.length : 0,
-    funnel: [
-      { mr: 'नोंदणी केली', en: 'Registered', v: db.sellers.length },
-      { mr: '50 रुपये भरले', en: 'Paid ₹50', v: db.payments.length },
-      { mr: 'मंजूर झाले', en: 'Approved', v: db.sellers.filter((s) => s.status === 'ACTIVE').length },
-      { mr: 'पहिले उत्पादन', en: 'First product', v: new Set(db.products.map((p) => p.sellerId)).size },
-      { mr: 'पहिले ऑर्डर', en: 'First order', v: sellersWithEarnings.size },
-    ],
     earningBands: ['₹0', '< ₹1,000', '₹1,000-5,000', '> ₹5,000'].map((label) => ({
       label,
       v: earningBandCounts.get(label) ?? 0,

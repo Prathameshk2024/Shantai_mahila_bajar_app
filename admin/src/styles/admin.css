@@ -103,7 +103,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: 14px 16px 12px;
   border-bottom: 1px solid var(--line);
   display: flex; align-items: center; gap: 10px;
+  /* It is a link now, so it has to stop looking like a visited one. */
+  color: inherit;
+  text-decoration: none;
 }
+.side__brand:hover { background: var(--surface-2); }
 /* The mark carries its own gold ring, so no border or background here -
    either would print a second ring around it. */
 .side__logo { width: 46px; height: 46px; flex: 0 0 auto; border-radius: 50%; display: block; }
@@ -421,46 +425,6 @@ table.t tr:last-child td { border-bottom: 0; }
 .bar__track { height: 20px; background: var(--bg-2); border-radius: 2px; overflow: hidden; }
 .bar__fill { height: 100%; background: var(--maroon); }
 .bar__fill--gold { background: var(--gold); }
-
-/* --- funnel ---------------------------------------------------------
- * Stage name, bar, count, share - one row each, on a fixed three-column
- * grid so the bars all start at the same x and the eye can read straight
- * down the drop-off. The old version put the name ABOVE its bar, which
- * doubled the height and left the numbers floating off to the right with
- * nothing to align to.
- */
-/* ONE grid for the whole funnel, with each row and each drop-off note using
-   `display: contents` to place its cells directly into it. A grid per row
-   would let every row size its own name column, and the bars would no longer
-   start at the same x - which is the only reason the drop-off is readable by
-   running the eye straight down. */
-.funnel { display: grid; grid-template-columns: minmax(88px, 22%) 1fr auto; gap: 6px 12px; align-items: center; }
-.funnel__row { display: contents; }
-.funnel__name { font-size: 13px; color: var(--ink-2); }
-.funnel__track { height: 26px; background: var(--bg-2); border-radius: 3px; overflow: hidden; }
-.funnel__fill { height: 100%; border-radius: 3px 0 0 3px; }
-.funnel__fill--over { border-radius: 3px; }
-.funnel__n {
-  display: flex; align-items: baseline; gap: 7px;
-  justify-content: flex-end; min-width: 74px;
-}
-.funnel__v { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
-.funnel__pct { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-
-/* The gap between two stages, carrying what was lost there. This is the
-   number a programme manager actually wants; it used to require mental
-   arithmetic off two bars. */
-.funnel__drop {
-  grid-column: 2 / 3;
-  display: flex; align-items: center; gap: 6px;
-  font-size: 11.5px; color: var(--ink-3);
-  padding: 3px 0;
-}
-.funnel__drop::before {
-  content: '';
-  width: 1px; height: 12px; background: var(--line-2); margin-inline-start: 10px;
-}
-.funnel__drop--bad { color: var(--danger); }
 
 /* ================= responsive ================= */
 
