@@ -6,7 +6,7 @@ import type {
  * The one seam between the console and the API.
  *
  * Same backend as the seller app - in development Vite proxies /api to
- * localhost:4000, in production VITE_API_URL points at the Render service.
+ * localhost:4000, in production VITE_API_URL points at the Cloud Run service.
  * Every call carries the admin bearer token; the API rejects anything else
  * with 401 at `adminRouter.use(requireRole('admin'))`.
  */

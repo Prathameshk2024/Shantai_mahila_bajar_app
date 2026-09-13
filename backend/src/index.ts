@@ -25,8 +25,8 @@ const app = express()
 const PORT = CONFIG_PORT
 
 /**
- * Render terminates TLS and forwards, so without this every request appears to
- * come from the load balancer. Per-IP rate limiting would then key the whole
+ * Cloud Run terminates TLS and forwards, so without this every request appears
+ * to come from its front end. Per-IP rate limiting would then key the whole
  * internet to one bucket - locking everybody out at once, or letting everybody
  * through, depending which way it broke. `1` means "trust exactly one hop",
  * which is the deployment; trusting all hops would let a client forge
