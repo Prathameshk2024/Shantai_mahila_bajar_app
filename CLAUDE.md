@@ -14,8 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Product spec: `docs/FEATURE-SPEC.md`. Deployment: `docs/DEPLOY.md`.
 Marathi style: `docs/MARATHI-STYLE.md` — read it before writing any Marathi string.
 
-> `README.
-md` still says "there is no admin UI in this repo". That is stale — `admin/` exists and is a full console. Trust this file and the code.
+`README.md` is deliberately short — layout, run, demo logins, links. Rules and architecture live here and in `docs/`, not there; the long README it replaced repeated them and had drifted from the code in more than a dozen places.
 
 ## Commands
 
@@ -45,9 +44,9 @@ cd backend && node --import tsx --test tests/session.test.ts
 cd admin   && node --import tsx --test tests/i18n.test.ts
 ```
 
-Vite proxies `/api` to `localhost:4000`, so nothing needs configuring in development. Reseed by deleting `backend/data/db.json` or `POST /api/dev/reset` (404s in production).
+Vite proxies `/api` to `localhost:4000`, so nothing needs configuring in development. A fresh clone starts with an **empty** database; demo data needs `SEED_DEMO_DATA=true` in `backend/.env`. Reseed by stopping the API and deleting `backend/data/db.json`, or with `POST /api/dev/reset`, which 404s unless `ALLOW_DEV_RESET` is set outside production.
 
-Demo logins: any 10-digit number, and the OTP screen **shows you the 6-digit code** — it is a real code that is really checked, so typing anything else is refused. Existing seller `9822011223` (Sunita, SMB-ANADUR-01). A customer phone with no name on record is authenticated but *not registered* — the app sends the customer to `/register/customer` to give one.
+Demo logins: any 10-digit number, and the OTP screen **shows you the 6-digit code** — it is a real code that is really checked, so typing anything else is refused. Seeded seller `9822011223` (Sunita, SMB-ANADUR-01). A customer phone with no name on record is authenticated but *not registered* — the app sends the customer to `/register/customer` to give one.
 
 There is no default admin password any more. Make an account with `npm run admin:users -- create you@example.com "Your Name"`, or set `ADMIN_BOOTSTRAP_EMAIL` + `ADMIN_BOOTSTRAP_PASSWORD_HASH` on a host with no shell.
 
@@ -278,9 +277,9 @@ when editing was free.
 The screen is `frontend/src/screens/seller/EditProduct.tsx`, and it is
 deliberately **not** the wizard: one question per screen is right when the job
 is teaching a seller what a listing needs, and wrong when the seller came to
-fix one number. `isFood` is immutable — it picks the category set and stamps
-the FSSAI licence, so changing it re-files the product under a licence nobody
-checked it against.
+fix one number. `isFood` is immutable — it picks the category set and
+which half of the fields apply (ingredients and veg/non-veg, or material), so
+changing it would leave an approved listing carrying claims nobody reviewed.
 
 ### Scroll position
 
@@ -366,7 +365,7 @@ Because approval is by hand, **how long she has been waiting is the number that 
 
 ### Config and graceful degradation
 
-`backend/src/config.ts` reads everything from the environment, and every integration degrades rather than crashing. With an empty `.env`: JSON-file database, emoji instead of photos, any 4-digit OTP. The boot banner (`describeConfig()`) prints what is actually live — check it before debugging a "broken" integration.
+`backend/src/config.ts` reads everything from the environment, and every integration degrades rather than crashing. With an empty `.env`: JSON-file database, emoji instead of photos, and a 6-digit OTP shown on screen. The boot banner (`describeConfig()`) prints what is actually live — check it before debugging a "broken" integration.
 
 `SESSION_SECRET` is the one exception: a fixed development fallback, but the server **refuses to boot in production without it**.
 
